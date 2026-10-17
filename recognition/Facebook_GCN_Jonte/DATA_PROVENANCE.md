@@ -1,7 +1,8 @@
 # Dataset provenance and Stage 2 source investigation
 
 Recorded on 17 October 2026. **The student explicitly approved the
-specification-linked 128-feature file. No task-model training has taken place.**
+specification-linked 128-feature file. This records Stage 2's data validation;
+subsequent task-model runs are documented in the README.**
 Generated downloads stay in ignored `data/` directories.
 
 ## Original prescribed PyG artifact
