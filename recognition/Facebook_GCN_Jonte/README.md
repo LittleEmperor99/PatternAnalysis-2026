@@ -4,10 +4,12 @@ COMP3710 individual Pattern Analysis project, Normal difficulty.
 
 ## Current status
 
-Stage 1: repository and environment setup. This is an incremental report, not
-a completed submission. Dataset loading, models, experiments, evaluation,
-inference and feasibility evidence have not been implemented yet. No measured
-classification results are available.
+Stage 1 is committed as `419b7db` (not pushed). Stage 2 loading, auditing and
+splitting have passed synthetic and real-data tests and await student review.
+The student explicitly approved the specification-linked, precomputed 128-feature
+file after the original PyG download failed. Its different representation and
+provenance are documented below. This is not a completed submission. No task
+models, training, classification results or final feasibility review exist yet.
 
 The selected project compares a feature-only MLP with a two-layer graph
 convolutional network for transductive Facebook page classification. The planned
@@ -90,7 +92,140 @@ metadata; the isolated environment passed its own package checks.
 
 The student must still select the VS Code interpreter, review the setup and
 code, verify their Git author identity, and confirm the official feasibility
-check-off arrangements. Stage 2 remains subject to approval.
+check-off arrangements. The student subsequently approved Stage 1 and explicitly
+authorised its commit and Stage 2 development. No push has been made.
+
+## Stage 2: loading, audits and fixed splits
+
+The setting is **transductive node classification**. Every node's descriptive
+features and every graph edge remain available, including edges across splits.
+This does not test generalisation to unseen graphs or future pages.
+
+The original `FacebookPagePage` download host fails DNS resolution. Appendix A,
+item 6 of the supplied PDF links to
+<https://github.com/gayanku/facebook_page-page_dataset>; on 17 October 2026 the
+student explicitly approved that existing file with its provenance disclosed.
+It contains **precomputed 128-dimensional TruncatedSVD features**, not a verified
+copy of GraphMining's original embeddings. The source's feature-generation code
+uses all node descriptions without labels. Using existing unlabelled features
+of all nodes is consistent with the declared transductive setting; this does not
+establish an inductive evaluation or equivalence to published PyG benchmarks.
+
+`dataset.py` downloads the immutable source revision
+`ec01d02c39da4385052023ed28e36f0794f61dc8`, verifying SHA256
+`7a1b8a0687515e9859d1ca649dc276825f5db44568894dfbb6b55ebc1cf6a9c1`
+on **every load**. An offline copy must match the same pinned bytes. There is
+no automatic source fallback. The file's numeric keys `X`, `y`, `edges_x` and
+`edges_y` are adapted to a native `torch_geometric.data.Data` object. The built-in
+`FacebookPagePage` loader cannot directly read this schema. No new embedding is
+fitted and feature values are preserved. NumPy pickle is disabled; the optional
+`page_name` object array is never read. No processed pickle cache is needed.
+
+The loader checks dimensions, finite features, integer targets, edge bounds and
+reciprocity, and writes a source/checksum manifest. Supplied edges and self-loops
+are preserved. The audit reports **342,004 edge entries**, including 358 self-loop
+entries and 179 duplicate ordered entries: reversing a self-loop duplicates it.
+There are 171,002 unique unordered pairs including loops and zero isolated nodes.
+These counts describe the source; no graph repairs are applied silently.
+
+Final Stage 2 verification also checks PyG 2.6.1's unweighted COO `gcn_norm`
+operator with its default self-loop addition and normalization. It replaces
+the supplied loops with one self-loop per node: 22,470 loops and 364,116
+normalized edge entries. The resulting normalized sparse matrix matches the
+matrix obtained from deduplicated input. Thus the documented duplicate loops
+do not double self-messages under these specific defaults. Other operators,
+explicit edge weights, or disabling self-loop handling require a fresh check.
+This is an operator verification, not a GCN implementation or experiment.
+
+Observed features are float32 with shape `(22470, 128)`, all finite, ranging
+approximately from -2.037593 to 3.002028. Independent comparison with the raw UCI
+release confirms every unique directed edge and every label by node ID. The
+actual class mapping is alphabetical and corrects the source README's mapping:
+
+| ID | Class | Nodes |
+| --- | --- | ---: |
+| 0 | company | 6,495 |
+| 1 | government | 6,880 |
+| 2 | politician | 5,768 |
+| 3 | tvshow | 3,327 |
+
+Split seed **42** is fixed independently of later model training seeds.
+Stratified splitting uses scikit-learn 1.7.2 with local `random_state` values;
+it does not change global NumPy/PyTorch random states. Actual allocations for
+22,470 nodes are:
+
+| Role | Nodes | Purpose |
+| --- | ---: | --- |
+| Training | 13,482 | Fit task-model weights |
+| Validation, total | 4,494 | Union of the three roles below |
+| Selection | 2,247 | Early stopping and model selection |
+| Calibration | 1,123 | Later confidence calibration |
+| Policy | 1,124 | Later rejection-threshold selection |
+| Test | 4,494 | Final evaluation after the protocol is frozen |
+
+Per-class split counts (company, government, politician, tvshow) are:
+
+| Partition | Company | Government | Politician | TV show |
+| --- | ---: | ---: | ---: | ---: |
+| Train | 3,897 | 4,128 | 3,461 | 1,996 |
+| Validation, total | 1,299 | 1,376 | 1,153 | 666 |
+| Selection | 649 | 688 | 577 | 333 |
+| Calibration | 325 | 344 | 288 | 166 |
+| Policy | 325 | 344 | 288 | 167 |
+| Test | 1,299 | 1,376 | 1,154 | 665 |
+
+The five distinct partitions are exhaustive and disjoint; the combined validation
+mask deliberately overlaps its own three subpartitions. Stratification and
+descriptive auditing use labels to allocate and count classes. No task model is
+trained by the dataset code.
+
+The returned `graph` contains only `x`, `edge_index` and `num_nodes`, with **no
+labels**. Labels are separate vectors in boolean-mask order, obtained through
+`targets("train")`, `targets("selection")`, etc. `targets("test")` raises unless
+`allow_test=True` is explicitly supplied. Combined `val` targets are rejected to
+avoid accidentally using calibration/policy labels for checkpoint selection.
+This API reduces accidental leakage; it is not a security boundary. Later
+training code must still be inspected and tested for correct label use.
+
+Download/load and audit the approved file, then run tests from the repository
+root. The dataset download uses a 30-second socket timeout. An existing local
+copy of the pinned file can be imported with `--raw-file <path>` instead.
+
+```powershell
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/dataset.py --audit-output recognition/Facebook_GCN_Jonte/outputs/dataset_audit.json
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/test_dataset.py -v
+```
+
+Latest result on 17 October 2026: **all 28 tests passed: 22 synthetic tests and
+6 real-data integration/operator tests, with no skips** in the tested local environment.
+Real tests verify exact source bytes and unchanged numeric inputs, graph
+integrity, repeatable stratified splits, target separation/mask order and an
+independent raw-UCI edge/label comparison. The optional UCI comparison is skipped
+on a clean machine unless its reference archive is downloaded; the other four
+real tests run after the approved file is downloaded. Synthetic
+coverage includes class balance, disjoint/exhaustive masks, seed repeatability,
+unchanged global random states, label separation, explicit test-target access,
+malformed input rejection, checksum/corruption detection, failed-download cleanup
+and offline loading/reloading with artificial fixtures. All checks concern the
+data pipeline; they are not task-model performance results.
+
+A separate fresh-root download from the pinned URL also succeeded and matched
+the same SHA256. The default-root audit command succeeded and wrote the actual
+dataset statistics and mask hashes to the ignored output JSON.
+
+To reproduce the independent comparison, download the pinned raw reference:
+
+```powershell
+New-Item -ItemType Directory -Force recognition/Facebook_GCN_Jonte/data/reference | Out-Null
+Invoke-WebRequest -Uri 'https://archive.ics.uci.edu/static/public/527/facebook+large+page+page+network.zip' -OutFile recognition/Facebook_GCN_Jonte/data/reference/uci-facebook.zip
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/test_dataset.py -v
+```
+
+The comparison test verifies the reference archive's checksum before using it.
+Generated JSON, downloaded files and Python caches remain excluded from Git;
+audit tables and provenance are included here as documentation. See
+[DATA_PROVENANCE.md](DATA_PROVENANCE.md) for exact source details and the original
+download investigation. No additional dependency was needed in Stage 2.
 
 ## Sources consulted for setup
 
