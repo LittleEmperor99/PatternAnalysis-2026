@@ -6,11 +6,12 @@ COMP3710 individual Pattern Analysis project, Normal difficulty.
 
 Stage 1 is committed as `419b7db` and Stage 2 as `8b916b4` (neither pushed).
 Stage 3 is committed as `d108125` and Stage 4 as `55207d4` (not pushed).
-Stage 5 selection evaluation and visualisations await student review.
+Stage 5 is committed as `514067a` (not pushed). Stage 6 confidence and referral
+analysis await student review; no held-out test results have been evaluated.
 The student explicitly approved the specification-linked, precomputed 128-feature
 file after the original PyG download failed. Its different representation and
 provenance are documented below. This is not a completed submission. The
-held-out test evaluation, confidence investigation, final inference driver and
+held-out test evaluation, final inference driver and
 final feasibility review are not implemented yet.
 
 The selected project compares a feature-only MLP with a two-layer graph
@@ -454,7 +455,7 @@ The default fresh directory is `outputs/evaluation_selection_seed42`; use
 `--output-dir` for repeats. This requires the genuine checkpoints created by the
 documented training commands. Node probabilities, embeddings, t-SNE coordinates
 and individual latency samples stay in ignored `outputs/` files. Curated
-aggregate JSON/CSV tables are under [reports/](reports/); report figures are
+aggregate JSON/CSV tables are available locally under `reports/` (local, ignored); report figures are
 under `figures/` as PNG and vector SVG. No new dependency is required.
 
 ### Selection results
@@ -554,6 +555,178 @@ Median full-graph times in that repeat were 0.322 ms (MLP) and 58.735 ms (GCN),
 illustrating timing variability; the tables retain the first measured run.
 The existing PyG typing deprecation warning remains.
 
+## Stage 6: confidence calibration and referral (18 October 2026)
+
+`confidence.py` keeps both trained checkpoints unchanged. It follows separate
+roles: **calibration** (1,123 nodes) fits one temperature per model; **policy**
+(1,124 nodes) chooses a referral threshold; **selection** (2,247 nodes) provides
+development reliability comparisons and illustrative errors. Training labels
+are used only for neighborhood diagnostics. No held-out test targets or metrics
+are accessed. Selection results remain development evidence because those nodes
+previously selected checkpoints.
+
+### Predeclared methodology
+
+Confidence is maximum softmax probability. Temperature scaling computes
+`softmax(logits / T)` with a positive scalar T, preserving predicted classes.
+Calibration NLL alone fits T in [0.05, 20], by 60 deterministic bisection steps
+on the monotone derivative of convex NLL in inverse temperature. T=1 is retained
+if numerical fitting cannot improve calibration NLL; no selection or policy
+labels fit this parameter. This implements the single-temperature approach of
+[Guo et al. (2017)](https://proceedings.mlr.press/v70/guo17a.html).
+
+Top-label ECE uses 15 fixed equal-width bins on [0,1], left-closed/right-open
+except the last bin includes 1. Empty bins contribute zero. ECE is the
+count-weighted absolute gap between bin accuracy and mean confidence. NLL uses
+stable log-softmax. Brier score is the mean **sum over all four classes** of
+squared probability errors (range 0?2), without division by class count.
+Correct/incorrect confidence distributions use all selection nodes, with each
+group separately normalized to density; counts and exact bin statistics are
+included in the aggregate JSON.
+
+The policy accepts iff calibrated confidence **>= threshold**. Search all unique
+policy confidences and choose the attainable threshold with highest coverage
+whose observed accepted-case error is <=5%, requiring **at least 100 accepted
+nodes** (about 8.9% of the policy partition). Entire confidence ties are included.
+If no threshold is feasible, refer all and report accepted error as undefined.
+This simple empirical procedure does not implement a formal risk guarantee.
+The objective, minimum count and bin/temperature settings were set before the
+runs and were not changed after inspecting outcomes.
+
+```powershell
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/confidence.py
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/test_confidence.py -v
+```
+
+Use a fresh `--output-dir` for repeats. The default is `outputs/confidence_seed42`.
+`reports/referral_policy.json` records the exact fitted temperatures, thresholds,
+checkpoint/data/split hashes and decision rule for subsequent frozen evaluation.
+Use its full precision rather than copying rounded README values. Calibration
+and threshold calculations use CPU float64 on the frozen model logits; subsequent
+inference must use the same probability/acceptance functions. Raw development
+logits and pointwise risk-curve outputs remain ignored. No new packages or model
+training were needed.
+
+### Measured calibration results
+
+| Model | Fitted T | Calibration NLL before | Calibration NLL after |
+| --- | ---: | ---: | ---: |
+| MLP | 0.944065 | 0.543933 | 0.543309 |
+| GCN | 0.783617 | 0.233817 | 0.224742 |
+
+Selection results (before -> after temperature scaling):
+
+| Model | ECE | NLL | Brier | Mean confidence: correct | Mean confidence: incorrect |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| MLP | 0.041857 -> 0.039367 | 0.571925 -> 0.572871 | 0.304633 -> 0.303915 | 0.817426 -> 0.826414 | 0.578736 -> 0.590026 |
+| GCN | 0.039970 -> 0.028464 | 0.290938 -> 0.295654 | 0.139148 -> 0.135150 | 0.907714 -> 0.935485 | 0.676321 -> 0.721929 |
+
+Both fitted temperatures are below 1, increasing confidence. Selection ECE and
+Brier improve, but **selection NLL worsens for both models**, despite improvement
+on the calibration fitting partition. On policy nodes, MLP ECE also worsens
+(0.043922 -> 0.046344), while GCN ECE improves (0.034850 -> 0.025303).
+Calibration therefore has mixed out-of-fit effects; it is not uniformly better.
+One small calibration partition and a single scalar cannot guarantee reliability
+for every class or node. ECE depends on binning and may hide confident rare
+errors; low-count bins have substantial sampling variability.
+
+GCN makes fewer mistakes (189 versus 470 selection errors), and has lower ECE,
+NLL and Brier overall, but its remaining mistakes are **more confident on
+average** than MLP mistakes. Accuracy, probability calibration and detecting
+individual errors are distinct engineering properties.
+
+![Selection reliability diagrams](figures/reliability_selection.png)
+![Selection correct/incorrect confidence distributions](figures/confidence_selection.png)
+
+### Selected operating points
+
+| Model | Threshold | Policy accepted / total | Errors among accepted | Coverage | Referral rate | Accepted-case error |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| MLP | 0.876537148 | 525 / 1124 | 26 | 46.71% | 53.29% | 4.95% |
+| GCN | 0.634198681 | 1021 / 1124 | 51 | 90.84% | 9.16% | 5.00% |
+
+Both thresholds satisfy the predeclared **observed policy** criterion. Applying
+them unchanged to selection nodes gives:
+
+| Model | Accepted / total | Accepted errors | Coverage | Referral rate | Accepted-case error |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| MLP | 1039 / 2247 | 53 | 46.24% | 53.76% | 5.10% |
+| GCN | 2081 / 2247 | 117 | 92.61% | 7.39% | 5.62% |
+
+The selection error exceeds 5% for both fixed policies. This directly shows why
+a threshold chosen to meet an observed error target is **not a future safety
+guarantee**. Threshold search is adaptive, samples are finite, and nodes share
+graph context. No safety certification, distribution-shift protection or human
+review accuracy is established here. Lower coverage increases reviewer workload
+and can reduce accepted-case error; confident errors still escape referral.
+GCN offers much greater automation at this objective, while MLP refers a larger
+fraction of its errors (88.72% versus GCN's 38.10% on selection nodes).
+The methods and policy values remain fixed despite these results.
+
+![Policy risk versus coverage](figures/risk_coverage_policy.png)
+
+### Five genuine development failure examples
+
+Cases are selected deterministically to illustrate high/low-confidence GCN
+errors and disagreements, rather than as a representative random sample.
+Confidence below is temperature-scaled; full raw/scaled values and exact node IDs
+are in `reports/failure_cases.csv` and `reports/confidence_summary.json`.
+
+| Node | True class | Degree | MLP prediction / confidence / referred | GCN prediction / confidence / referred |
+| --- | --- | ---: | --- | --- |
+| 8505 | government | 129 | politician / 0.946076 / no | politician / 0.999967 / no |
+| 5712 | politician | 4 | government / 0.314796 / yes | government / 0.284373 / yes |
+| 9141 | politician | 33 | politician / 0.998607 / no | government / 0.997739 / no |
+| 9229 | government | 21 | politician / 0.999479 / no | government / 0.998656 / no |
+| 1626 | company | 16 | politician / 0.559255 / yes | politician / 0.999855 / no |
+
+Degree counts unique non-self neighbors, removing raw duplicate edges/loops for
+this diagnostic only. Neighbor class counts use **training labels only**;
+other neighbors remain unlabelled in this analysis. Labels are not inputs to GCN
+message passing. Observations and possible explanations are separated below:
+
+- **8505:** 55 politician and 22 government training-labelled neighbors among
+  degree 129. Both models are wrong; GCN is extremely confident and not referred.
+  Neighbor mismatch is consistent with graph-context influence, not proof of it.
+- **5712:** degree 4, with two known politician neighbors, yet both predict
+  government with low confidence and are referred. Sparse context is a possible
+  limitation; the known neighbor labels do not explain the wrong class by a
+  simple majority argument.
+- **9141:** 13 government and four politician training-labelled neighbors among
+  degree 33. MLP correctly predicts politician while GCN confidently predicts
+  government and escapes referral. Graph aggregation may contribute to the flip.
+- **9229:** all 12 training-labelled neighbors are government (degree 21).
+  GCN corrects the MLP's highly confident politician error, consistent with
+  useful graph context; neither prediction is referred.
+- **1626:** six politician and one government training-labelled neighbors
+  (degree 16), with no known company neighbor. Both are wrong, but MLP is
+  referred while the highly confident GCN is accepted. This illustrates a
+  potentially harmful confidence increase from aggregation.
+
+These are hypotheses about model behavior, not causal conclusions: no graph
+ablation or page-content review was performed. Semantic government/politician
+ambiguity cannot be verified from the supplied SVD features alone. Two-hop
+context and neighbors without used labels may also matter.
+
+![Failure-case degree and training-labelled neighbors](figures/failure_neighbors_selection.png)
+
+### Stage 6 verification and limits
+
+All **54 tests passed**, including nine new tests for analytic ECE/NLL/Brier,
+known temperature optimum and boundary behavior, stable extreme logits,
+argmax preservation, whole confidence ties, no-feasible-policy behavior,
+maximum-coverage threshold search against brute force on the real data, actual
+case predictions/degrees, and full pipeline exports. Instrumented pipeline tests
+verify that fitting receives calibration targets and threshold search receives
+policy targets. Held-out labels are poisoned and their access is forbidden.
+Checkpoint architectures and hashes remain unchanged. The existing PyG typing
+deprecation warning persists; it did not prevent execution. A second genuine
+CUDA run reproduced temperatures, thresholds, all confidence metrics, selected
+cases, development logits and PNG figures exactly. Report exports match the
+original outputs; both checkpoint hashes match the committed Stage 5 report.
+These parameters/methods are fixed for subsequent evaluation and await student
+review before the Stage 6 commit. Final test evaluation has not begun.
+
 ## Sources consulted for setup
 
 - Supplied `COMP3710_Report_2026_draft_v2.3.pdf`, especially Sections 2.1 and 3–6.
@@ -567,3 +740,9 @@ The existing PyG typing deprecation warning remains.
 - sklearn metrics: <https://scikit-learn.org/1.7/modules/generated/sklearn.metrics.roc_auc_score.html>.
 - sklearn t-SNE: <https://scikit-learn.org/1.7/modules/generated/sklearn.manifold.TSNE.html>.
 - PyTorch CUDA timing: <https://docs.pytorch.org/docs/stable/notes/cuda.html>.
+
+- Selective classification: Geifman and El-Yaniv (2017), <https://proceedings.neurips.cc/paper/2017/hash/4a8423d5e91fda00bb7e46540e2b0cf1-Abstract.html>. The present empirical threshold search does not claim their formal risk guarantee.
+
+Repository restriction: generated CSV/JSON reports are kept locally in ignored
+`reports/` and `outputs/`. Previously tracked Stage 5 aggregate files were removed
+from the current Git tree in Stage 6 without rewriting existing history.

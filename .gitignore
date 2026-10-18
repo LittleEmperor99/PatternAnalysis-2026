@@ -48,3 +48,6 @@ cache/
 !.env.example
 Thumbs.db
 .DS_Store
+
+# Generated aggregate reports stay local; README and figures carry submission evidence
+/recognition/Facebook_GCN_Jonte/reports/
