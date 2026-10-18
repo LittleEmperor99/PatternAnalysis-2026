@@ -2,6 +2,10 @@
 
 No calibration, policy or test targets are accessed. Metrics use sklearn;
 inference and hidden representations use the original PyTorch/PyG models.
+
+Metric API: https://scikit-learn.org/1.7/modules/generated/sklearn.metrics.roc_auc_score.html.
+t-SNE method: van der Maaten & Hinton (2008),
+https://www.jmlr.org/papers/v9/vandermaaten08a.html (sklearn implementation).
 """
 
 import argparse

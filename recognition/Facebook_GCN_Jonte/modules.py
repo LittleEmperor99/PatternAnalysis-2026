@@ -1,4 +1,9 @@
-"""PyTorch model components for the Facebook node-classification project."""
+"""PyTorch model components for the Facebook node-classification project.
+
+GCN architecture: Kipf & Welling (2017), https://arxiv.org/abs/1609.02907.
+Layer implementation: PyG 2.6.1 GCNConv public API,
+https://pytorch-geometric.readthedocs.io/en/2.6.1/generated/torch_geometric.nn.conv.GCNConv.html.
+"""
 
 import torch
 from torch import nn
