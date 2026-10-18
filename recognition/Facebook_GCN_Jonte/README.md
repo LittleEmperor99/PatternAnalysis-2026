@@ -5,10 +5,11 @@ COMP3710 individual Pattern Analysis project, Normal difficulty.
 ## Current status
 
 Stage 1 is committed as `419b7db` and Stage 2 as `8b916b4` (neither pushed).
-Stage 3's MLP implementation and one genuine baseline run await student review.
+Stage 3 is committed as `d108125` (not pushed). Stage 4 GCN training and
+verification await student review.
 The student explicitly approved the specification-linked, precomputed 128-feature
 file after the original PyG download failed. Its different representation and
-provenance are documented below. This is not a completed submission. The GCN,
+provenance are documented below. This is not a completed submission. The
 held-out test evaluation, confidence investigation, final inference driver and
 final feasibility review are not implemented yet.
 
@@ -341,6 +342,94 @@ Stage 2 tests passed again before its commit. No GCN model, calibration,
 rejection policy, AUROC analysis or test-set performance evaluation is included
 in Stage 3.
 
+## Stage 4: two-layer GCN
+
+`GCN` in `modules.py` uses **GCNConv(128, 64) -> ReLU -> dropout(0.5) ->
+GCNConv(64, 4)** and returns raw logits. It has 8,516 trainable parameters,
+the same count as the MLP. Each layer aggregates degree-normalized neighbor
+features, including one self-message. Two layers provide two-hop graph context.
+The MLP remains a feature-only comparison; graph structure is the key additional
+input, although PyG and Linear layers also use different default initialization.
+
+The shared trainer accepts `--model mlp` (default) or `--model gcn`. Adam,
+learning rate 0.01, weight decay 0.0005, maximum 300 epochs, patience 30,
+minimum selection macro-F1 improvement 0.0001 and both seeds 42 are unchanged.
+GCN forwards use the full fixed graph, then index **only training logits** for
+cross-entropy. Selection labels are used only for validation/checkpoint choice.
+Calibration, policy and test targets are never requested. All graph features and
+edges, including those of reserved nodes, are available under the documented
+transductive setting; this is not an inductive unseen-graph experiment.
+
+Both convolutions use unweighted COO edges, `normalize=True`,
+`add_self_loops=True` and `cached=True`. In this setting PyG replaces supplied
+self-loops, including their duplicates, with one per node: normalization has
+364,116 edge entries and 22,470 self-loops. A real-graph test confirms matching
+outputs against deduplicated, loop-free input normalized by a fresh model.
+No source edges are modified. The cache is valid **only for the same fixed
+graph and device**; instantiate a fresh model for a different graph. Cache
+tensors are absent from checkpoints and rebuild automatically after loading.
+
+```powershell
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/train.py --model gcn --max-epochs 3 --patience 3 --output-dir recognition/Facebook_GCN_Jonte/outputs/gcn_smoke_seed42
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/train.py --model gcn --output-dir recognition/Facebook_GCN_Jonte/outputs/gcn_seed42
+.\.venv\Scripts\python.exe -m unittest discover -s recognition/Facebook_GCN_Jonte -p "test_*.py" -v
+```
+
+Use fresh output directories for repeats. Run artifacts remain ignored, with
+source/data/split hashes retained in checkpoints and summaries. No new packages
+were required. Deterministic CUDA operations worked with the installed PyTorch
+2.8.0+cu126 / PyG 2.6.1; no nondeterministic fallback was enabled.
+
+### Measured seed-42 selection comparison
+
+| Measurement | MLP baseline | GCN |
+| --- | ---: | ---: |
+| Epochs completed | 178 | 200 |
+| Restored best epoch | 148 | 170 |
+| Restored training cross-entropy | 0.473551 | 0.235384 |
+| Restored selection cross-entropy | 0.571925 | 0.290938 |
+| Selection accuracy | 79.08% | 91.59% |
+| Selection macro-F1 | 0.774272 | 0.910558 |
+| Trainable parameters | 8,516 | 8,516 |
+| Measured training-loop seconds | 1.7253 | 22.7897 |
+| Peak CUDA allocated memory, MiB | 82.81 | 1,893.84 |
+| Peak CUDA reserved memory, MiB | 88.00 | 2,240.00 |
+| Maximum sampled process RSS, MiB | 1,096.55 | 1,354.15 |
+
+Both runs used the RTX 2060 SUPER. Timing/memory scopes are as defined in Stage
+3; these are single-run measurements, not controlled benchmark estimates.
+CPU validation tests overlapped part of the first GCN run. The three-epoch GCN
+smoke run completed successfully (selection accuracy 63.11%, macro-F1 0.511298).
+The full GCN stopped at epoch 200 and restored epoch 170; final optimization
+loss with dropout was 0.240887, while restored training accuracy was 92.92%.
+
+GCN improved selection accuracy by **12.51 percentage points** and macro-F1 by
+**0.136286** with the same parameter count. This supports using graph context
+for this split, at greater memory and computation cost. It does not establish
+held-out test performance or variability across training seeds. No settings
+were retuned using these results.
+
+![GCN training and selection curves, seed 42](figures/gcn_training_seed42.png)
+
+### Verification and limitations
+
+All **38 tests passed**: the existing 28 data tests, six MLP tests and four new
+real-data GCN tests. New checks cover architecture/graph dependence, actual
+normalized-loop behavior, early stopping, cache reconstruction after checkpoint
+reload and reserved-label isolation. Poisoning calibration/policy/test targets
+leaves selected GCN weights and metrics unchanged; access is restricted to
+training and selection targets. A full MLP run through the shared trainer
+reproduced the original history, weights and curve PNG exactly. A second full
+GCN run reproduced all 200 history rows, selected weights and curve PNG bytes;
+its measured loop time was 21.9666 seconds. Fresh-process CUDA reload rebuilt
+both normalization caches and exactly matched selection metrics. Recorded
+source hashes match the executable files, and all split hashes match the MLP.
+
+PyG's inspector emits a Python 3.13 typing deprecation warning during tests;
+execution succeeds, and no dependency change was needed. Future Python 3.15
+compatibility is outside the pinned environment. Final test metrics, advanced
+visualizations and confidence/rejection analysis remain for later stages.
+
 ## Sources consulted for setup
 
 - Supplied `COMP3710_Report_2026_draft_v2.3.pdf`, especially Sections 2.1 and 3–6.
@@ -348,3 +437,5 @@ in Stage 3.
 - PyTorch installation: <https://pytorch.org/get-started/locally/>.
 - PyG installation: <https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html>.
 - PyG dataset: <https://pytorch-geometric.readthedocs.io/en/2.6.1/generated/torch_geometric.datasets.FacebookPagePage.html>.
+
+- PyG GCNConv implementation: <https://pytorch-geometric.readthedocs.io/en/2.6.1/_modules/torch_geometric/nn/conv/gcn_conv.html>.

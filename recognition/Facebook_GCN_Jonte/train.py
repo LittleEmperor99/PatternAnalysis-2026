@@ -1,4 +1,4 @@
-"""Train the MLP using training targets and selection targets only.
+"""Train an MLP or GCN using training targets and selection targets only.
 
 No test, calibration or policy targets are requested. Outputs include the best
 checkpoint, full history, basic resource measurements and learning curves.
@@ -25,7 +25,7 @@ import torch
 from torch import nn
 
 from dataset import DEFAULT_ROOT, NodeClassificationDataset, load_facebook, sha256_file
-from modules import MLP
+from modules import GCN, MLP
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,7 @@ class TrainConfig:
     min_delta: float = 0.0001
     device: str = "auto"
     cpu_threads: int = 1
+    model_type: str = "MLP"
 
 
 def configure_reproducibility(config: TrainConfig) -> torch.device:
@@ -51,6 +52,8 @@ def configure_reproducibility(config: TrainConfig) -> torch.device:
         raise ValueError("Epoch limit, patience and CPU threads must be positive")
     if config.learning_rate <= 0 or config.weight_decay < 0 or config.min_delta < 0:
         raise ValueError("Invalid learning rate, weight decay or minimum improvement")
+    if config.model_type not in ("MLP", "GCN"):
+        raise ValueError("Model type must be MLP or GCN")
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     random.seed(config.seed)
     np.random.seed(config.seed)
@@ -69,11 +72,18 @@ def configure_reproducibility(config: TrainConfig) -> torch.device:
     return device
 
 
+def model_logits(model, features, edge_index=None, mask=None):
+    """Mask outputs, never features, for fixed-graph message passing."""
+    logits = model(features) if edge_index is None else model(features, edge_index)
+    return logits if mask is None else logits[mask]
+
+
 @torch.no_grad()
-def evaluate(model: nn.Module, features: torch.Tensor, targets: torch.Tensor) -> dict:
+def evaluate(model: nn.Module, features: torch.Tensor, targets: torch.Tensor,
+             edge_index=None, mask=None) -> dict:
     """Basic loss/accuracy/macro-F1, with dropout disabled for validation."""
     model.eval()
-    logits = model(features)
+    logits = model_logits(model, features, edge_index, mask)
     loss = nn.functional.cross_entropy(logits, targets)
     if not torch.isfinite(loss):
         raise RuntimeError("Evaluation loss is not finite")
@@ -125,7 +135,7 @@ def source_record() -> dict:
     }
 
 
-def train_mlp(
+def train_model(
     dataset: NodeClassificationDataset, config: TrainConfig, output_dir: Path,
 ) -> dict:
     """Fit on train nodes, select by selection macro-F1, and restore the best model.
@@ -144,9 +154,16 @@ def train_mlp(
         torch.cuda.set_device(device)
         torch.cuda.reset_peak_memory_stats(device)
 
-    # Extract only permitted feature rows and targets. Reserved splits are unused.
-    train_x = dataset.graph.x[dataset.masks["train"]].to(device)
-    selection_x = dataset.graph.x[dataset.masks["selection"]].to(device)
+    # GCN sees all unlabeled graph context; only permitted labels are fetched.
+    edge_index = train_mask = selection_mask = None
+    if config.model_type == "GCN":
+        train_x = selection_x = dataset.graph.x.to(device)
+        edge_index = dataset.graph.edge_index.to(device)
+        train_mask = dataset.masks["train"].to(device)
+        selection_mask = dataset.masks["selection"].to(device)
+    else:
+        train_x = dataset.graph.x[dataset.masks["train"]].to(device)
+        selection_x = dataset.graph.x[dataset.masks["selection"]].to(device)
     train_y = dataset.targets("train").to(device)
     selection_y = dataset.targets("selection").to(device)
     model_config = {
@@ -155,14 +172,14 @@ def train_mlp(
         "num_classes": dataset.audit["classes"],
         "dropout": config.dropout,
     }
-    model = MLP(**model_config).to(device)
+    model = {"MLP": MLP, "GCN": GCN}[config.model_type](**model_config).to(device)
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay,
     )
     process = psutil.Process()
     peak_sampled_rss = process.memory_info().rss
     metadata = {
-        "model_type": "MLP", "model_config": model_config,
+        "model_type": config.model_type, "model_config": model_config,
         "training_config": asdict(config), "data_provenance": dataset.provenance,
         "split_mask_sha256": {
             name: report["mask_sha256"] for name, report in dataset.audit["splits"].items()
@@ -181,7 +198,9 @@ def train_mlp(
         model.train()
         optimizer.zero_grad(set_to_none=True)
         # Cross-entropy receives raw logits and ONLY the training target vector.
-        loss = nn.functional.cross_entropy(model(train_x), train_y)
+        loss = nn.functional.cross_entropy(
+            model_logits(model, train_x, edge_index, train_mask), train_y,
+        )
         if not torch.isfinite(loss):
             raise RuntimeError("Training loss is not finite")
         loss.backward()
@@ -189,7 +208,7 @@ def train_mlp(
             if parameter.grad is None or not torch.isfinite(parameter.grad).all():
                 raise RuntimeError("Missing or nonfinite training gradients")
         optimizer.step()
-        selection = evaluate(model, selection_x, selection_y)
+        selection = evaluate(model, selection_x, selection_y, edge_index, selection_mask)
         row = {
             "epoch": epoch, "optimization_loss": float(loss.item()),
             **{f"selection_{name}": value for name, value in selection.items()},
@@ -226,8 +245,8 @@ def train_mlp(
         "best_epoch": checkpoint["epoch"], "epochs_completed": len(history),
         "stopped_early": len(history) < config.max_epochs,
         "last_optimization_loss": history[-1]["optimization_loss"],
-        "restored_training_metrics": evaluate(model, train_x, train_y),
-        "restored_selection_metrics": evaluate(model, selection_x, selection_y),
+        "restored_training_metrics": evaluate(model, train_x, train_y, edge_index, train_mask),
+        "restored_selection_metrics": evaluate(model, selection_x, selection_y, edge_index, selection_mask),
         "parameter_count": sum(p.numel() for p in model.parameters()),
         "device": str(device),
         "device_name": torch.cuda.get_device_name(device) if device.type == "cuda" else "CPU",
@@ -246,8 +265,16 @@ def train_mlp(
     return summary
 
 
+def train_mlp(dataset, config, output_dir):
+    """Keep the Stage 3 entry point restricted to the feature-only baseline."""
+    if config.model_type != "MLP":
+        raise ValueError("train_mlp requires model_type=MLP; use train_model for GCN")
+    return train_model(dataset, config, output_dir)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", choices=("mlp", "gcn"), default="mlp")
     parser.add_argument("--data-root", type=Path, default=DEFAULT_ROOT)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--seed", type=int, default=42)
@@ -258,10 +285,10 @@ def main() -> None:
     args = parser.parse_args()
     config = TrainConfig(
         seed=args.seed, split_seed=args.split_seed, max_epochs=args.max_epochs,
-        patience=args.patience, device=args.device,
+        patience=args.patience, device=args.device, model_type=args.model.upper(),
     )
-    output_dir = args.output_dir or Path(__file__).resolve().parent / "outputs" / f"mlp_seed{args.seed}"
-    train_mlp(load_facebook(args.data_root, args.split_seed), config, output_dir)
+    output_dir = args.output_dir or Path(__file__).resolve().parent / "outputs" / f"{args.model}_seed{args.seed}"
+    train_model(load_facebook(args.data_root, args.split_seed), config, output_dir)
 
 
 if __name__ == "__main__":
