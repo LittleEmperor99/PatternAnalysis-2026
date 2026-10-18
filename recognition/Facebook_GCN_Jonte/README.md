@@ -5,8 +5,8 @@ COMP3710 individual Pattern Analysis project, Normal difficulty.
 ## Current status
 
 Stage 1 is committed as `419b7db` and Stage 2 as `8b916b4` (neither pushed).
-Stage 3 is committed as `d108125` (not pushed). Stage 4 GCN training and
-verification await student review.
+Stage 3 is committed as `d108125` and Stage 4 as `55207d4` (not pushed).
+Stage 5 selection evaluation and visualisations await student review.
 The student explicitly approved the specification-linked, precomputed 128-feature
 file after the original PyG download failed. Its different representation and
 provenance are documented below. This is not a completed submission. The
@@ -430,6 +430,130 @@ execution succeeds, and no dependency change was needed. Future Python 3.15
 compatibility is outside the pinned environment. Final test metrics, advanced
 visualizations and confidence/rejection analysis remain for later stages.
 
+## Stage 5: selection evaluation and visualisations (18 October 2026)
+
+`evaluate.py` loads the original frozen checkpoints (MLP epoch 148, GCN epoch
+170), verifies their data/split hashes and recomputes selection metrics. No
+training, model changes or hyperparameter search occurs. Only the 2,247 selection
+labels are requested; calibration, policy and held-out test targets remain unused.
+These are development results on a partition already used for early stopping,
+so they are not an unbiased final performance estimate.
+
+Predictions are argmax of raw logits. Softmax probabilities supply one score per
+class for one-vs-rest AUROC. Precision/recall/F1 use explicit class ID order and
+zero precision when a class has no predictions; macro values weight the four
+classes equally. Macro AUROC is the unweighted mean of four class-versus-rest
+AUROCs. Undefined AUROC (a missing true class) fails explicitly. AUROC measures
+ranking discrimination, not probability calibration.
+
+```powershell
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/evaluate.py
+```
+
+The default fresh directory is `outputs/evaluation_selection_seed42`; use
+`--output-dir` for repeats. This requires the genuine checkpoints created by the
+documented training commands. Node probabilities, embeddings, t-SNE coordinates
+and individual latency samples stay in ignored `outputs/` files. Curated
+aggregate JSON/CSV tables are under [reports/](reports/); report figures are
+under `figures/` as PNG and vector SVG. No new dependency is required.
+
+### Selection results
+
+| Model | Accuracy | Macro precision | Macro recall | Macro-F1 | Macro OvR AUROC |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| MLP | 0.790832 | 0.779994 | 0.770415 | 0.774272 | 0.942277 |
+| GCN | 0.915888 | 0.913772 | 0.907731 | 0.910558 | 0.983507 |
+
+| Model | Class | Support | Precision | Recall | F1 | OvR AUROC |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| MLP | company | 649 | 0.827907 | 0.822804 | 0.825348 | 0.948945 |
+| MLP | government | 688 | 0.794944 | 0.822674 | 0.808571 | 0.945113 |
+| MLP | politician | 577 | 0.783333 | 0.814558 | 0.798641 | 0.953028 |
+| MLP | tvshow | 333 | 0.713793 | 0.621622 | 0.664526 | 0.922021 |
+| GCN | company | 649 | 0.911179 | 0.916795 | 0.913978 | 0.979593 |
+| GCN | government | 688 | 0.914530 | 0.933140 | 0.923741 | 0.981054 |
+| GCN | politician | 577 | 0.934142 | 0.934142 | 0.934142 | 0.989909 |
+| GCN | tvshow | 333 | 0.895238 | 0.846847 | 0.870370 | 0.983473 |
+
+The GCN improves all four class F1 scores. TV shows remain the weakest class:
+recall rises from 62.16% to 84.68%, with 31 GCN TV-show nodes still classified
+as company pages. Government/politician confusions fall from 154 reciprocal
+errors in the MLP to 46 in the GCN. These aggregate observations are limited to
+the selection nodes; individual failure-case investigation belongs to Stage 6.
+
+Confusion matrices show **true classes on rows, predictions on columns**.
+Annotations include counts and percentages within each true class, with a shared
+0?1 colour scale, so minority-class recall remains visible.
+
+![MLP selection confusion matrix](figures/mlp_confusion_selection.png)
+![GCN selection confusion matrix](figures/gcn_confusion_selection.png)
+
+### Hidden embedding visualisation
+
+The GCN embedding is the 64-dimensional `ReLU(conv1)` output with dropout off.
+It is computed with the full graph, then restricted to all 2,247 selection nodes.
+One t-SNE fit uses seed 42, perplexity 30, PCA initialization, automatic learning
+rate, Barnes?Hut approximation and 1,000 maximum iterations (`n_jobs=1`). Labels
+are supplied only for plot colours, never to t-SNE. Settings are recorded in JSON;
+no projection settings were chosen after viewing alternative plots.
+
+![GCN selection hidden embedding t-SNE](figures/gcn_tsne_selection.png)
+
+Broad class groupings and a mixed central region are visible. This is qualitative
+evidence only: two-dimensional distances, apparent cluster sizes and empty space
+do not directly represent original feature distances or establish accuracy.
+
+### Inference resources
+
+Both models run `eval()` under `torch.inference_mode()` on **all 22,470 nodes**.
+Features and, for GCN, edges are already resident on the same RTX 2060 SUPER.
+The first forward is timed separately; it includes GCN normalization-cache
+creation and first-use kernel overheads, but excludes checkpoint loading and
+input transfer. Then 20 warm-up calls precede 100 timed calls. CUDA synchronizes
+before and after every timed call; values are wall-clock model latency including
+Python/launch overhead. Metrics, softmax, transfers and plotting are excluded.
+GCN steady-state calls retain its fixed-graph normalization cache. These are
+full-graph latencies, not independent single-page response times.
+
+| Measurement | MLP | GCN |
+| --- | ---: | ---: |
+| Parameters | 8,516 | 8,516 |
+| First forward, ms | 67.775 | 385.775 |
+| Steady-state mean, ms | 0.387 | 52.888 |
+| Steady-state median, ms | 0.348 | 52.835 |
+| Steady-state 95th percentile, ms | 0.627 | 60.560 |
+| Peak inference CUDA allocated, MiB | 54.00 | 1860.69 |
+| Peak inference CUDA reserved, MiB | 66.00 | 2240.00 |
+
+Each model starts after garbage collection and CUDA cache clearing. CUDA peaks
+cover model/input setup, first forward, warm-up, timed calls and selection metric
+computation, before embedding extraction. They include the live input/model and
+GCN graph/cache tensors; they are neither incremental kernel workspace nor total
+board usage. Inference peaks have a different scope from the Stage 3/4 training
+peaks and should not be compared as identical workloads. Strict deterministic
+operations remain enabled. Latencies vary with system load, device clocks and
+software; these measurements describe this environment, not a general hardware
+benchmark. Smaller parameter count alone does not imply inexpensive graph
+message passing.
+
+### Stage 5 validation
+
+All **45 tests passed**, including seven new evaluation tests. Hand-checkable
+synthetic metric fixtures independently verify precision/recall/F1, confusion
+counts and AUROC by positive-versus-negative pair rankings; they are not project
+training data. Real-checkpoint tests cover provenance/split mismatch rejection,
+end-to-end JSON/CSV/PNG/SVG exports, hidden dimensions and selected node IDs.
+Replacing every non-selection target with an invalid value leaves GCN metrics,
+probabilities and embeddings unchanged; the pipeline denies all non-selection
+target requests. Both models' restored selection metrics match their original
+checkpoints. The first test run exposed an incorrect hand-calculated expected
+precision/F1 in the synthetic fixture; those expectations were corrected and
+the full suite passed. A second complete CUDA evaluation reproduced metrics,
+probabilities, hidden embeddings, t-SNE coordinates and PNG figures exactly.
+Median full-graph times in that repeat were 0.322 ms (MLP) and 58.735 ms (GCN),
+illustrating timing variability; the tables retain the first measured run.
+The existing PyG typing deprecation warning remains.
+
 ## Sources consulted for setup
 
 - Supplied `COMP3710_Report_2026_draft_v2.3.pdf`, especially Sections 2.1 and 3–6.
@@ -439,3 +563,7 @@ visualizations and confidence/rejection analysis remain for later stages.
 - PyG dataset: <https://pytorch-geometric.readthedocs.io/en/2.6.1/generated/torch_geometric.datasets.FacebookPagePage.html>.
 
 - PyG GCNConv implementation: <https://pytorch-geometric.readthedocs.io/en/2.6.1/_modules/torch_geometric/nn/conv/gcn_conv.html>.
+
+- sklearn metrics: <https://scikit-learn.org/1.7/modules/generated/sklearn.metrics.roc_auc_score.html>.
+- sklearn t-SNE: <https://scikit-learn.org/1.7/modules/generated/sklearn.manifold.TSNE.html>.
+- PyTorch CUDA timing: <https://docs.pytorch.org/docs/stable/notes/cuda.html>.

@@ -1,0 +1,227 @@
+{
+  "partition": "selection",
+  "reserved_partitions_evaluated": [],
+  "generated_at_utc": "2026-10-18T01:01:22.487775+00:00",
+  "device": "cuda:0",
+  "device_name": "NVIDIA GeForce RTX 2060 SUPER",
+  "versions": {
+    "torch": "2.8.0+cu126",
+    "pyg": "2.6.1",
+    "sklearn": "1.7.2",
+    "numpy": "2.2.6"
+  },
+  "data_sha256": "7a1b8a0687515e9859d1ca649dc276825f5db44568894dfbb6b55ebc1cf6a9c1",
+  "selection_mask_sha256": "48f67aa650248b9385f04225c996bef746f50443def433a7b1a7d99ac8036df9",
+  "source": {
+    "git_revision": "55207d49160e996f151b40f7c0160afd08261228",
+    "git_worktree_dirty": true,
+    "code_sha256": {
+      "dataset.py": "b598758fbc153b98b731b92b7d5be7de70e94ad0b19736cd067243d2558a7815",
+      "modules.py": "426b1c64b68be44f8c2a5e8e2ec08f531e07c04d6ac357e492567894a8eb5071",
+      "train.py": "2c91b110100b310fb7bc94d1fa64587cf3fcbdc9498b018c050e06818f688243"
+    },
+    "evaluate_py_sha256": "9573d218e0232b0c23948995df84070148582af88e7ab27e6432951e6c64c058"
+  },
+  "latency_scope": "full 22470-node forward, inputs resident, eval/inference_mode; no transfers, softmax, metrics or plots; synchronized per call",
+  "memory_scope": "fresh per-model CUDA allocator peak from model/input setup through selection metrics; excludes subsequent embedding extraction; not total device usage",
+  "tsne": {
+    "settings": {
+      "n_components": 2,
+      "perplexity": 30.0,
+      "init": "pca",
+      "learning_rate": "auto",
+      "max_iter": 1000,
+      "random_state": 42,
+      "method": "barnes_hut",
+      "n_jobs": 1
+    },
+    "nodes": 2247,
+    "input_dimensions": 64,
+    "representation": "ReLU(conv1) in eval mode",
+    "labels_used_for": "plot colours only"
+  },
+  "models": [
+    {
+      "model": "MLP",
+      "checkpoint_sha256": "0429ce4eb0ea381290e038d1438401a4b92a5a779a4285a71dcba37400678062",
+      "checkpoint_epoch": 148,
+      "cross_entropy": 0.5719247460365295,
+      "metrics": {
+        "nodes": 2247,
+        "accuracy": 0.7908322207387628,
+        "macro_precision": 0.7799943084376286,
+        "macro_recall": 0.7704146033703719,
+        "macro_f1": 0.7742715709836321,
+        "macro_ovr_auroc": 0.9422767684321264,
+        "per_class": [
+          {
+            "class_id": 0,
+            "class_name": "company",
+            "support": 649,
+            "precision": 0.827906976744186,
+            "recall": 0.8228043143297381,
+            "f1": 0.8253477588871716,
+            "ovr_auroc": 0.9489452339307031
+          },
+          {
+            "class_id": 1,
+            "class_name": "government",
+            "support": 688,
+            "precision": 0.7949438202247191,
+            "recall": 0.8226744186046512,
+            "f1": 0.8085714285714286,
+            "ovr_auroc": 0.945113332935543
+          },
+          {
+            "class_id": 2,
+            "class_name": "politician",
+            "support": 577,
+            "precision": 0.7833333333333333,
+            "recall": 0.8145580589254766,
+            "f1": 0.7986406117247239,
+            "ovr_auroc": 0.9530277400139064
+          },
+          {
+            "class_id": 3,
+            "class_name": "tvshow",
+            "support": 333,
+            "precision": 0.7137931034482758,
+            "recall": 0.6216216216216216,
+            "f1": 0.6645264847512039,
+            "ovr_auroc": 0.9220207668483531
+          }
+        ],
+        "confusion_matrix": [
+          [
+            534,
+            44,
+            18,
+            53
+          ],
+          [
+            34,
+            566,
+            80,
+            8
+          ],
+          [
+            11,
+            74,
+            470,
+            22
+          ],
+          [
+            66,
+            28,
+            32,
+            207
+          ]
+        ]
+      },
+      "resources": {
+        "parameter_count": 8516,
+        "inference_nodes": 22470,
+        "peak_cuda_allocated_mib": 53.998046875,
+        "peak_cuda_reserved_mib": 66.0,
+        "first_forward_ms": 67.7746000001207,
+        "warmup_calls": 20,
+        "timed_calls": 100,
+        "mean_ms": 0.3871669986983761,
+        "median_ms": 0.34825000329874456,
+        "p95_ms": 0.6268699944484979,
+        "min_ms": 0.3102000046055764
+      }
+    },
+    {
+      "model": "GCN",
+      "checkpoint_sha256": "63ad1b19b7659ccbbc6618ef079a800166299f6e2b921e04f5295f199f1a6cd4",
+      "checkpoint_epoch": 170,
+      "cross_entropy": 0.2909376323223114,
+      "metrics": {
+        "nodes": 2247,
+        "accuracy": 0.9158878504672897,
+        "macro_precision": 0.913772324300058,
+        "macro_recall": 0.9077308913631896,
+        "macro_f1": 0.9105579966432549,
+        "macro_ovr_auroc": 0.9835071282762258,
+        "per_class": [
+          {
+            "class_id": 0,
+            "class_name": "company",
+            "support": 649,
+            "precision": 0.9111791730474732,
+            "recall": 0.9167950693374423,
+            "f1": 0.9139784946236559,
+            "ovr_auroc": 0.9795931354871555
+          },
+          {
+            "class_id": 1,
+            "class_name": "government",
+            "support": 688,
+            "precision": 0.9145299145299145,
+            "recall": 0.9331395348837209,
+            "f1": 0.9237410071942446,
+            "ovr_auroc": 0.9810543058311083
+          },
+          {
+            "class_id": 2,
+            "class_name": "politician",
+            "support": 577,
+            "precision": 0.9341421143847487,
+            "recall": 0.9341421143847487,
+            "f1": 0.9341421143847487,
+            "ovr_auroc": 0.9899085710727591
+          },
+          {
+            "class_id": 3,
+            "class_name": "tvshow",
+            "support": 333,
+            "precision": 0.8952380952380953,
+            "recall": 0.8468468468468469,
+            "f1": 0.8703703703703703,
+            "ovr_auroc": 0.9834725007138799
+          }
+        ],
+        "confusion_matrix": [
+          [
+            595,
+            27,
+            5,
+            22
+          ],
+          [
+            24,
+            642,
+            18,
+            4
+          ],
+          [
+            3,
+            28,
+            539,
+            7
+          ],
+          [
+            31,
+            5,
+            15,
+            282
+          ]
+        ]
+      },
+      "resources": {
+        "parameter_count": 8516,
+        "inference_nodes": 22470,
+        "peak_cuda_allocated_mib": 1860.68994140625,
+        "peak_cuda_reserved_mib": 2240.0,
+        "first_forward_ms": 385.77510000322945,
+        "warmup_calls": 20,
+        "timed_calls": 100,
+        "mean_ms": 52.88831800193293,
+        "median_ms": 52.83495000912808,
+        "p95_ms": 60.56032500346191,
+        "min_ms": 46.38149999664165
+      }
+    }
+  ]
+}
