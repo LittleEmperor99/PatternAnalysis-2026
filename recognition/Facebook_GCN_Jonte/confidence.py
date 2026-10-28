@@ -194,14 +194,19 @@ def collect_logits(dataset, checkpoint_path, name, device):
     return logits.cpu().double().numpy()
 
 
-def failure_cases(dataset, selection_logits, temperatures, thresholds, limit=5):
-    """Deterministic illustrative selection errors; inspect train-labelled neighbors only.
+def failure_cases(dataset, selection_logits, temperatures, thresholds, limit=5,
+                  *, partition="selection", allow_test=False):
+    """Deterministic illustrative errors; inspect train-labelled neighbors only.
 
     Cases intentionally illustrate confident errors, uncertain errors, and model
     disagreements. They are not a random sample or an estimate of error prevalence.
     """
-    ids = np.flatnonzero(dataset.masks["selection"].numpy())
-    truth = dataset.targets("selection").numpy()
+    if partition not in ("selection", "test"):
+        raise ValueError("Failure analysis is restricted to selection or final test")
+    if partition == "test" and not allow_test:
+        raise PermissionError("Final test failure analysis requires explicit release")
+    ids = np.flatnonzero(dataset.masks[partition].numpy())
+    truth = dataset.targets(partition, allow_test=allow_test).numpy()
     raw = {name: probabilities(logits) for name, logits in selection_logits.items()}
     scaled = {name: probabilities(logits, temperatures[name]) for name, logits in selection_logits.items()}
     predictions = {name: probs.argmax(1) for name, probs in scaled.items()}
@@ -236,7 +241,7 @@ def failure_cases(dataset, selection_logits, temperatures, thresholds, limit=5):
         neighbors = neighbors[neighbors != node]
         known = train_labels[neighbors]
         counts = np.bincount(known[known >= 0], minlength=len(CLASS_NAMES))
-        row = {"node_id": node, "partition": "selection", "reason": reason,
+        row = {"node_id": node, "partition": partition, "reason": reason,
                "true_class": CLASS_NAMES[truth[index]], "true_class_id": int(truth[index]),
                "unique_nonself_degree": len(neighbors),
                "training_neighbor_class_counts": dict(zip(CLASS_NAMES, map(int, counts))),
@@ -252,24 +257,24 @@ def failure_cases(dataset, selection_logits, temperatures, thresholds, limit=5):
     return cases
 
 
-def plot_reliability(results, stem):
+def plot_reliability(results, stem, partition="selection"):
     figure, axes = plt.subplots(1, 2, figsize=(10, 4), sharex=True, sharey=True)
     for axis, name in zip(axes, ("MLP", "GCN")):
         axis.plot([0, 1], [0, 1], "--", color="gray", label="Perfect reliability")
         for stage, label in (("before", "Raw"), ("after", "Temperature scaled")):
-            bins = [row for row in results[name]["metrics"]["selection"][stage]["bins"] if row["count"]]
+            bins = [row for row in results[name]["metrics"][partition][stage]["bins"] if row["count"]]
             axis.plot([b["confidence"] for b in bins], [b["accuracy"] for b in bins],
                       marker="o", markersize=4, label=label)
         axis.set(title=name, xlabel="Mean maximum softmax probability", xlim=(0, 1), ylim=(0, 1))
         axis.grid(alpha=.2)
         axis.legend(fontsize=8)
     axes[0].set_ylabel("Observed accuracy")
-    figure.suptitle("Selection reliability: 15 equal-width confidence bins")
+    figure.suptitle(f"{partition.title()} reliability: 15 equal-width confidence bins")
     figure.tight_layout()
     save_plot(figure, stem)
 
 
-def plot_distributions(selection_logits, targets, temperatures, stem):
+def plot_distributions(selection_logits, targets, temperatures, stem, partition="selection"):
     figure, axes = plt.subplots(2, 2, figsize=(10, 7), sharex=True)
     for row, name in enumerate(("MLP", "GCN")):
         for column, temperature in enumerate((1., temperatures[name])):
@@ -284,12 +289,12 @@ def plot_distributions(selection_logits, targets, temperatures, stem):
             axes[row, column].set(title=f"{name}: {'raw' if column == 0 else 'temperature scaled'}",
                                   xlabel="Maximum softmax probability", ylabel="Within-group density")
             axes[row, column].legend(fontsize=8)
-    figure.suptitle("Selection confidence: correct versus incorrect predictions")
+    figure.suptitle(f"{partition.title()} confidence: correct versus incorrect predictions")
     figure.tight_layout()
     save_plot(figure, stem)
 
 
-def plot_risk(curves, results, stem):
+def plot_risk(curves, results, stem, partition="policy"):
     figure, axis = plt.subplots(figsize=(7, 5))
     for name in ("MLP", "GCN"):
         curve = curves[name]
@@ -299,14 +304,14 @@ def plot_risk(curves, results, stem):
             axis.scatter(chosen["coverage"], chosen["accepted_error"], s=65, color=line.get_color(), marker="x")
     axis.axhline(TARGET_ERROR, color="gray", linestyle="--", label="5% observed-error objective")
     axis.set(xlabel="Accepted fraction (coverage)", ylabel="Observed accepted-case error",
-             title="Policy partition: calibrated-confidence risk versus coverage", xlim=(0, 1))
+             title=f"{partition.title()} partition: calibrated-confidence risk versus coverage", xlim=(0, 1))
     axis.legend()
     axis.grid(alpha=.2)
     figure.tight_layout()
     save_plot(figure, stem)
 
 
-def plot_neighbors(cases, stem):
+def plot_neighbors(cases, stem, partition="selection"):
     figure, axis = plt.subplots(figsize=(9, 4))
     bottom = np.zeros(len(cases))
     for label in (*CLASS_NAMES, "Labels not used"):
@@ -314,7 +319,7 @@ def plot_neighbors(cases, stem):
                            else case["neighbors_without_used_labels"] for case in cases])
         axis.bar([str(c["node_id"]) for c in cases], counts, bottom=bottom, label=label)
         bottom += counts
-    axis.set(xlabel="Selection node ID", ylabel="Unique non-self neighbors",
+    axis.set(xlabel=f"{partition.title()} node ID", ylabel="Unique non-self neighbors",
              title="Failure cases: graph degree and training-labelled neighborhood")
     axis.legend(fontsize=8)
     figure.tight_layout()

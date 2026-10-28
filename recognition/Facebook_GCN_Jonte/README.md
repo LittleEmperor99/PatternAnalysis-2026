@@ -4,17 +4,19 @@
 
 Author account: [LittleEmperor99](https://github.com/LittleEmperor99).
 
-Status: Stage 7 report, 18 October 2026. **All outcomes below are development
-results; held-out test evaluation is pending Stage 8.**
+Status: experiments completed 18 October 2026; final verification repeated
+28 October 2026. **Development and held-out
+test results are distinguished below. Tutor check-off and external submissions
+remain pending.**
 
 This prototype classifies official Facebook pages as company, government,
 politician or TV show using a feature-only MLP and a two-layer GCN. Its intended
 user is an analyst deciding which labels to automate and which to review. The
 engineering question is whether graph context improves classification and
 confidence reliability enough to justify its computational cost. GCN improves
-selection accuracy from 79.08% to 91.59%, but still accepts extremely confident
-errors. A policy-set 5% error objective does not remain below 5% on selection
-nodes; autonomous deployment is therefore not established.
+held-out accuracy from 78.95% to 92.48%. Frozen referral rules achieve observed
+test accepted-case error below 5%, but still accept nearly certain wrong labels.
+The same rules exceeded 5% on selection nodes; autonomous safety is not established.
 
 ## One-page feasibility review
 
@@ -58,8 +60,8 @@ of tuning on test labels.
 
 **Consultation status:** pending. The student reports the updated course-profile
 check-off period as **19–30 October 2026** and plans an upcoming practical.
-This review does not complete the tutor-recorded hurdle. Final PDF pagination
-will be checked in Stage 8.
+This review does not complete the tutor-recorded hurdle. The review is isolated to one page in the PDF export; completion of this written
+review does not replace the pending consultation.
 
 ## Dataset provenance and label separation
 
@@ -103,7 +105,7 @@ and pairwise disjoint:
 | Selection | 2,247 (10%) | Early stopping; development comparisons/examples |
 | Calibration | 1,123 (~5%) | Fit one temperature per model using NLL |
 | Policy | 1,124 (~5%) | Select the confidence threshold |
-| Test | 4,494 (20%) | Unopened final evaluation in Stage 8 |
+| Test | 4,494 (20%) | Final held-out evaluation only; no tuning |
 
 The middle three roles form 20% validation, but its combined mask never selects
 checkpoints. Stratification/audits use labels for bookkeeping, not learning.
@@ -277,58 +279,162 @@ not correct a label. Methods and thresholds were not retuned using these outcome
 
 ![Policy risk versus coverage](figures/risk_coverage_policy.png)
 
-## Five development failure autopsies
+## Development failure evidence
 
-Cases deterministically illustrate confident/uncertain GCN errors and model
-disagreements; they are not a random sample. Confidence is temperature-scaled.
-Degree counts unique non-self neighbors. Class composition uses **training
-labels only**, not reserved/test labels; these diagnostics never enter message
-passing. Raw/scaled case values remain reproducible through `confidence.py`.
+The pre-test five-case investigation used selection nodes 8505, 5712, 9141,
+9229 and 1626. It found graph-context benefits and confident failures, motivating
+the unchanged cautionary operating policy. For example, 9141 was correct under
+MLP but confidently wrong under GCN; 9229 showed the opposite. These observations
+did not trigger model or threshold changes. The [development neighborhood
+figure](figures/failure_neighbors_selection.png) and `confidence.py` preserve
+that analysis; the five primary held-out autopsies follow below.
 
-| Node ID | True class | Degree | MLP prediction / confidence / referred | GCN prediction / confidence / referred |
+## Final held-out evaluation
+
+The [frozen protocol](EVALUATION_PROTOCOL.md) was recorded before test-label
+release: manifest UTC **2026-10-18 12:59:32**, first release **13:00:04**.
+It binds exact checkpoints, policy, data/split identities, model/training
+configurations and executable source hashes. The new driver first passed its
+guard and pipeline tests on selection labels only. Neither training nor
+temperature fitting nor threshold search occurs during final evaluation.
+The original 4,494 test nodes were scored identically for both models; the
+manifest was rechecked after scoring. The results below retain the first run.
+
+### Classification and comparison with selection
+
+| Model | Selection accuracy | Test accuracy | Test macro precision | Test macro recall | Test macro-F1 | Raw OvR AUROC | Scaled OvR AUROC |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| MLP | 79.08% | 78.95% | 0.785106 | 0.765641 | 0.772748 | 0.946475 | 0.946499 |
+| GCN | 91.59% | 92.48% | 0.922368 | 0.917927 | 0.920009 | 0.987667 | 0.987662 |
+
+| Model | Class | Support | Precision | Recall | F1 | Raw OvR AUROC | Scaled OvR AUROC |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| MLP | company | 1299 | 0.837880 | 0.827560 | 0.832688 | 0.954963 | 0.954965 |
+| MLP | government | 1376 | 0.768325 | 0.853198 | 0.808540 | 0.950976 | 0.950935 |
+| MLP | politician | 1154 | 0.780000 | 0.777296 | 0.778646 | 0.949206 | 0.949309 |
+| MLP | tvshow | 665 | 0.754221 | 0.604511 | 0.671119 | 0.930753 | 0.930786 |
+| GCN | company | 1299 | 0.929128 | 0.918399 | 0.923732 | 0.986175 | 0.986222 |
+| GCN | government | 1376 | 0.920366 | 0.949128 | 0.934526 | 0.988610 | 0.988668 |
+| GCN | politician | 1154 | 0.938261 | 0.935009 | 0.936632 | 0.990038 | 0.990028 |
+| GCN | tvshow | 665 | 0.901716 | 0.869173 | 0.885145 | 0.985847 | 0.985731 |
+
+Temperature scaling leaves predictions, accuracy, precision/recall/F1 and
+confusion counts unchanged; multiclass score rankings and hence AUROC can vary.
+MLP test accuracy is 0.13 percentage points below selection; GCN is 0.89 points
+above it. GCN's test improvement over MLP is **13.53 percentage points**, with
+macro-F1 improving from 0.772748 to 0.920009. Single fixed splits do not establish
+statistical significance. TV shows remain weakest (recall 60.45% MLP, 86.92%
+GCN); government/politician reciprocal test confusions fall from 322 to 91.
+
+![MLP final test confusion](figures/mlp_confusion_test.png)
+![GCN final test confusion](figures/gcn_confusion_test.png)
+
+### Final calibration and referral
+
+| Model | Raw ECE | Scaled ECE | Raw NLL | Scaled NLL | Raw Brier | Scaled Brier |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| MLP | 0.028585 | 0.022660 | 0.551295 | 0.551707 | 0.290952 | 0.290150 |
+| GCN | 0.032919 | 0.017268 | 0.251976 | 0.248782 | 0.123676 | 0.119723 |
+
+GCN has slightly **worse raw ECE** than MLP despite much better classification,
+NLL and Brier. With the already fitted temperatures, GCN has lower ECE and
+improves all three test reliability metrics. MLP's test NLL worsens slightly,
+although ECE/Brier improve. This differs from selection, where NLL worsened for
+both; no method was changed after seeing either result. Calibration reliability
+is metric- and partition-dependent rather than a uniform architectural gain.
+
+![Final test reliability](figures/reliability_test.png)
+![Final test confidence distributions](figures/confidence_test.png)
+
+| Model | Unchanged threshold | Accepted / 4494 | Accepted errors | Coverage | Referral rate | Accepted-case error |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| MLP | 0.876537148 | 2151 | 90 | 47.86% | 52.14% | 4.184% |
+| GCN | 0.634198681 | 4165 | 200 | 92.68% | 7.32% | 4.802% |
+
+Thresholds in this test table are rounded for display; exact values remain in
+the frozen protocol and policy artifact. Both meet the observed <=5% test target
+**without threshold adjustment**.
+MLP refers 2,343 nodes and catches 856/946 errors (90.49%); GCN refers 329 nodes
+and catches 138/338 errors (40.83%). These are different coverage operating
+points, not a matched-coverage detector comparison. GCN still accepts **200
+wrong labels**. Meeting this one test target does not erase the selection-set
+failure or prove safety on future/distribution-shifted pages. Diagnostic test
+risk curves describe outcomes; no alternative threshold was selected from them.
+
+![Test risk versus coverage with fixed operating points](figures/risk_coverage_test.png)
+
+### Five genuine held-out failure autopsies
+
+The same ordered five-case selection rule used in development was frozen before
+test inspection. It intentionally illustrates extremes and disagreements, not
+their prevalence. Confidence is temperature-scaled; only training-labelled
+neighbors inform class composition, with all other neighbor labels unused.
+
+| Node | True class | Degree | MLP prediction / confidence / referred | GCN prediction / confidence / referred |
 | --- | --- | ---: | --- | --- |
-| 8505 | government | 129 | politician / 0.946076 / no | politician / 0.999967 / no |
-| 5712 | politician | 4 | government / 0.314796 / yes | government / 0.284373 / yes |
-| 9141 | politician | 33 | politician / 0.998607 / no | government / 0.997739 / no |
-| 9229 | government | 21 | politician / 0.999479 / no | government / 0.998656 / no |
-| 1626 | company | 16 | politician / 0.559255 / yes | politician / 0.999855 / no |
+| 20083 | company | 69 | company / 0.828106 / yes | tvshow / 0.999934 / no |
+| 9781 | politician | 1 | politician / 0.381831 / yes | company / 0.300690 / yes |
+| 3887 | company | 9 | company / 0.768463 / yes | tvshow / 0.999554 / no |
+| 2460 | government | 16 | company / 0.999462 / no | government / 0.985785 / no |
+| 22056 | politician | 45 | government / 0.704706 / yes | government / 0.999580 / no |
 
-- **8505:** 55 politician and 22 government training-labelled neighbors among
-  degree 129. Both are wrong; GCN's near-certain error escapes referral. Neighbor
-  mismatch is consistent with harmful context, without proving causation.
-- **5712:** degree 4 with two known politician neighbors. Both predict government
-  uncertainly and are referred. Sparse context may limit inference, but known
-  neighbor labels do not explain the wrong class by majority vote.
-- **9141:** 13 government versus four politician training-labelled neighbors
-  among degree 33. MLP is correct; GCN confidently flips to government and is
-  accepted. Aggregation may contribute to the error.
-- **9229:** all 12 training-labelled neighbors are government (degree 21).
-  GCN corrects MLP's confident politician error, consistent with useful context.
-- **1626:** six politician and one government training-labelled neighbors,
-  none known company (degree 16). Both are wrong; MLP is referred but GCN's
-  highly confident politician prediction is accepted.
+- **20083:** 32 TV-show versus seven company training-labelled neighbors among
+  degree 69. MLP is correct but referred; GCN confidently calls it TV show and
+  accepts it. Neighborhood mismatch is consistent with a harmful context effect.
+- **9781:** degree one, whose one training-labelled neighbor is politician.
+  MLP correctly predicts politician uncertainly; GCN wrongly predicts company
+  uncertainly. Both are referred. Sparse context may limit inference, but a
+  simple neighbor-label majority does not explain this wrong GCN prediction.
+- **3887:** all seven training-labelled neighbors are TV shows (degree nine),
+  but the node is company. MLP is correct and referred; GCN's TV-show error is
+  highly confident and accepted, again consistent with contextual mismatch.
+- **2460:** all seven training-labelled neighbors are government (degree 16).
+  GCN corrects MLP's almost-certain company error; both are accepted. This is
+  consistent with useful graph context overcoming misleading individual features.
+- **22056:** 18 government versus eight politician training-labelled neighbors
+  (degree 45). Both predict government incorrectly; only MLP is referred. GCN's
+  sharpened error escapes the policy despite its otherwise strong performance.
 
-These are hypotheses, not causal findings: no graph ablation or page-content
-review was performed. Government/politician semantic ambiguity cannot be
-verified from SVD features alone. Two-hop context and neighbors whose labels
-were not used may matter.
+These are evidence-based associations and explicit hypotheses, not causal
+attributions. No graph ablation or page-content review was performed. The
+labels are diagnostics only; GCN aggregates features, not neighbor labels.
 
-![Failure neighborhoods](figures/failure_neighbors_selection.png)
+![Held-out failure neighborhood evidence](figures/failure_neighbors_test.png)
+
+### Final inference resources and reproducibility
+
+| Model | Parameters | Warm median ms | Warm p95 ms | Peak allocated MiB | Peak reserved MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| MLP | 8516 | 0.395 | 1.004 | 53.98 | 66.00 |
+| GCN | 8516 | 56.467 | 64.677 | 1860.67 | 2240.00 |
+
+The frozen 20-warm-up/100-synchronized-call procedure again processes all
+22,470 nodes, excluding transfers and metrics from timing. These final memory
+peaks cover model/input setup through the final full forward; metrics are on
+CPU, unlike development profiling's slightly broader peak scope. Timings vary;
+the first measured run is retained rather than selecting a faster repeat.
+
+A clean committed-source snapshot with the explicit Stage 8 source overlay and
+copied frozen data/checkpoints/policy reproduced all test logits, classification,
+calibration and referral metrics, five case selections and PNG bytes exactly.
+It reused the pinned ML environment: this is a clean-source/artifact verification,
+not a claim of full retraining or installation in a new ML environment. The
+original checkpoints and policy were unchanged throughout.
 
 ## Engineering recommendation
 
-Advance GCN to a **supervised analyst-assistance pilot**, subject to unchanged
-held-out evaluation, rather than autonomous classification. Its +12.51-point
-selection accuracy and greater policy coverage justify the measured GPU cost
-for offline classification of this fixed graph. A 53 ms full-graph forward and
-<2 GiB allocated inference memory fit the available 8 GB GPU. Keep MLP as the
-cheap feature-only fallback when edges or GPU capacity are unavailable.
+Advance GCN to a **supervised analyst-assistance pilot**, not unrestricted
+autonomous classification. Its held-out +13.53-point accuracy and 92.68% coverage
+at 4.80% observed accepted error justify the measured GPU cost for offline use
+on this fixed graph: about 56 ms per full forward and <2 GiB allocated memory
+fit the available 8 GB GPU. Keep MLP as the inexpensive feature-only fallback.
 
-Do not promise <=5% production error: the rule already misses that target on
-selection and accepts nearly certain wrong labels. Temperature scaling improves
-some measures while worsening selection NLL. Reviewer capacity, class-specific
-errors, human accuracy, new graphs and distribution shift require separate
-validation. Single-seed/split results and illustrative cases limit generalization.
+Do not promise <=5% production error: selection exceeded that target, the final
+test still contains 200 accepted GCN errors, and extreme confidence can be wrong.
+Calibration improves some measures but is not uniformly better across partitions.
+Reviewer workload/accuracy, new graphs, distribution shift and class-specific
+costs need separate validation. Single seed/split and deliberately selected
+cases limit generalization; no test-driven retuning was performed.
 
 ## Reproduction and inference
 
@@ -398,9 +504,10 @@ invalid IDs and nonempty outputs are rejected.
 
 ![Label-free GCN inference example](figures/inference_gcn_selection.png)
 
-Selection is the default demonstration partition. Explicit `--partition test`
-supports label-free inference but **has not been run in Stage 7** and does not
-calculate evaluation metrics. Stage 8 must explicitly release test targets.
+Selection remains the default demonstration partition. Explicit `--partition test`
+supports label-free inference without metrics. Final scored evaluation uses the
+separately guarded `final_evaluate.py`, after manifest verification and explicit
+test-target release.
 
 ## Code, validation and repository restrictions
 
@@ -412,9 +519,12 @@ calculate evaluation metrics. Stage 8 must explicitly release test targets.
 | [evaluate.py](evaluate.py) | Selection metrics, resource profiling and t-SNE |
 | [confidence.py](confidence.py) | Calibration, policy and failure diagnostics |
 | [predict.py](predict.py) | Frozen label-free inference and plots |
+| [final_evaluate.py](final_evaluate.py) | Pre-release manifest and guarded frozen final evaluation |
+| [export_report.py](export_report.py) | Local Markdown-to-PDF export with one-page feasibility review |
 | `test_*.py` | Analytic, real-data and fresh-process verification |
 
-All **59 tests passed together** in Stage 7, including five new inference tests.
+All **62 tests passed together** in Stage 8, including five inference tests and
+three new final-evaluation guard/pipeline tests that use selection labels only.
 Checks cover normalization, label-role isolation, independent metrics,
 known temperature optimum, exhaustive real threshold search, reloads, exact
 reproductions, prediction exports and missing files. Fresh processes ran both
@@ -434,37 +544,55 @@ copies), with findings documented above. Previously tracked Stage 5 reports
 were untracked in Stage 6 without rewriting history. Never force-add artifacts.
 Progressive milestones are recorded in Git; no push or PR has been authorized.
 
-## Stage 8: frozen final evaluation and submission procedure
+## Final verification and submission status
 
-1. Record the approved revision and SHA-256 of both `best.pt` files plus
-   `outputs/confidence_seed42/referral_policy.json`; verify data/split hashes.
-   Preserve these artifacts. Do not train, recalibrate, sweep thresholds or
-   select models using test results.
-2. Add/run a guarded final-evaluation path using existing frozen forward,
-   metric, probability and acceptance functions. Explicitly request
-   `dataset.targets("test", allow_test=True)` only there. Both models must use
-   the same 4,494 test IDs. Score raw/scaled probabilities and apply saved
-   thresholds unchanged.
-3. Report accuracy, per-class precision/recall/F1, macro-F1, OvR AUROC, confusion
-   matrices, ECE/NLL/Brier, coverage/referral/accepted error and frozen-method
-   resource measurements. Optional test t-SNE must keep the fixed settings.
-   Separate development/test results and report any operating-target failure.
-4. Inspect 3–5 genuine test failures using a fixed illustrative rule. Keep
-   neighborhood diagnostics limited to training-labelled neighbors; distinguish
-   observations from hypotheses and do not feed failures back into tuning.
-5. Incorporate results, rerun checks, validate assets and inspect the README
-   PDF, including one-page feasibility pagination. Student personally reviews
-   code, calculations, references and disclosure. Record tutor check-off only
-   when it actually occurs.
-6. After explicit authorization, commit, push the fork's `topic-recognition`
-   and open a professional PR to
-   `shakes76/PatternAnalysis-2026:topic-recognition`. Verify its diff excludes
-   data/model/generated outputs and submit the README PDF to Turnitin. Internal
-   target: **20 October 2026**; confirm the official deadline (initially supplied
-   as 30 October). None of these external actions has been performed.
-7. Complete the pending feasibility consultation during the reported
-   19–30 October period. Later respond to teaching-team review with commits and
-   replies within its published window; Phase 2 remains separate.
+The assessment audit is in [SUBMISSION_CHECKLIST.md](SUBMISSION_CHECKLIST.md).
+The frozen protocol and exact checkpoint identities are in
+[EVALUATION_PROTOCOL.md](EVALUATION_PROTOCOL.md). Generated metrics, release
+audits, manifests, HTML/PDF and inspection renders remain local under `outputs/`.
+
+For a fresh independent reproduction, first recreate both models and the
+development policy as above, then freeze once and release explicitly:
+
+```powershell
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/final_evaluate.py --freeze-only
+.\.venv\Scripts\python.exe recognition/Facebook_GCN_Jonte/final_evaluate.py --release-test-labels
+```
+
+Do not regenerate/refit the already approved artifacts for the original final
+evaluation. Manifest mismatch or absent release permission prevents label access;
+the manifest is verified again afterward. Repeats must preserve all decisions.
+
+The optional PDF tooling is isolated from the frozen ML environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m venv recognition/Facebook_GCN_Jonte/outputs/report_env
+.\recognition\Facebook_GCN_Jonte\outputs\report_env\Scripts\python.exe -m pip install -r recognition/Facebook_GCN_Jonte/requirements-report.txt
+.\recognition\Facebook_GCN_Jonte\outputs\report_env\Scripts\python.exe recognition/Facebook_GCN_Jonte/export_report.py
+```
+
+The default output is `outputs/submission/COMP3710_Facebook_GCN_Report.pdf`.
+Export uses a headless local Chrome/Edge browser; nothing is uploaded. Its HTML
+and inspection files are excluded from Git. The feasibility section has forced
+page boundaries. The inspected export has 21 pages and all 15 embedded figures;
+the feasibility review occupies page 2 alone. Rendered-page review and automated
+checks found no blank pages, missing required content or out-of-bounds text.
+`inspect_report.py` reproduces the inspection and extracts the one-page review.
+Final inspection details are recorded in the checklist.
+
+**Pending external requirements:** tutor feasibility check-off (reported window
+19–30 October), student review of the code/report/disclosure, authorization to
+push, PR to upstream `topic-recognition`, and README PDF
+submission to Turnitin. Stage 8 commit approval was received on 28 October.
+The original internal target was 20 October; confirm the official course deadline. Later teaching-team review responses remain a separate phase.
+No push, PR or Turnitin submission has been performed.
+
+**History audit:** seven progressive commits exist through Stage 7. No dataset
+or model weights were found in those commits. Three small generated aggregate
+CSV/JSON files occur in historical commit `514067a`, removed from the current
+tree by `ecfce37`. They conflict with a literal code/scripts-plus-visuals reading
+of Section 4.1. This remains an explicit user/staff decision; no history was
+rewritten. `.vscode/settings.json` is interpreter configuration, not experiment data.
 
 ## Artificial Intelligence Usage Disclosure
 
@@ -472,7 +600,7 @@ OpenAI Codex assisted with planning, substantial code generation/refinement,
 debugging, report drafting and execution of data checks, tests, training,
 evaluation and plots. Verification included source/checksum audits, label-role
 isolation tests, independent metric fixtures, checkpoint reloads, frozen-artifact
-checks, repeat experiments and fresh-process inference. Reported automated
+checks, repeat experiments, final held-out evaluation and fresh-process inference. Reported automated
 checks were executed through Codex. The student reviewed and approved milestones
 and remains responsible for personally understanding, independently verifying
 and defending the code, decisions and claims; independent student execution is

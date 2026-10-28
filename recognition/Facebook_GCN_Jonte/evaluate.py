@@ -183,7 +183,7 @@ def save_plot(figure, stem):
     plt.close(figure)
 
 
-def plot_confusion(metrics, name, stem):
+def plot_confusion(metrics, name, stem, partition="selection"):
     counts = np.asarray(metrics["confusion_matrix"])
     normalized = counts / counts.sum(axis=1, keepdims=True)
     figure, axis = plt.subplots(figsize=(6, 5))
@@ -193,7 +193,7 @@ def plot_confusion(metrics, name, stem):
                   ha="center", va="center", color="white" if normalized[row, column] > .5 else "black")
     axis.set(xticks=range(4), yticks=range(4), xticklabels=CLASS_NAMES,
              yticklabels=CLASS_NAMES, xlabel="Predicted class", ylabel="True class",
-             title=f"{name}: selection nodes (n={metrics['nodes']:,})")
+             title=f"{name}: {partition} nodes (n={metrics['nodes']:,})")
     figure.colorbar(image, ax=axis, label="Fraction within true class")
     figure.tight_layout()
     save_plot(figure, stem)
