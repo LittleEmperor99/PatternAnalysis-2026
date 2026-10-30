@@ -2,12 +2,13 @@
 
 **COMP3710 Pattern Analysis — Normal-difficulty Multi-layer GNN**
 
-Author account: [LittleEmperor99](https://github.com/LittleEmperor99).
+**Jonte Dickson — Student ID: 48830339**
+
+GitHub: [LittleEmperor99](https://github.com/LittleEmperor99).
 
 Status: experiments completed 18 October 2026; final verification repeated
 28 October 2026. **Development and held-out
-test results are distinguished below. Tutor check-off and external submissions
-remain pending.**
+test results are distinguished below.**
 
 This prototype classifies official Facebook pages as company, government,
 politician or TV show using a feature-only MLP and a two-layer GCN. Its intended
@@ -18,62 +19,68 @@ held-out accuracy from 78.95% to 92.48%. Frozen referral rules achieve observed
 test accepted-case error below 5%, but still accept nearly certain wrong labels.
 The same rules exceeded 5% on selection nodes; autonomous safety is not established.
 
-## One-page feasibility review
+## COMP3710 — Feasibility Review
 
-*Prepared 18 October 2026 from actual prototype evidence. This consolidates
-feasibility; it does not claim an earlier consultation or retrospective approval.*
+**Facebook Page Classification Using Graph Convolutional Networks**
 
-**User need and scope.** A social-network analyst needs four-class page labels
-with manageable review effort. The prototype uses a fixed public graph in a
-transductive setting. It compares a small MLP with a Normal-difficulty two-layer
-GCN; additional architecture search is outside scope.
+**Jonte Dickson — Student ID: 48830339**
 
-**Acceptance criteria.** These review gates are not retrospective claims of
-preregistered performance targets: (1) deterministic, disjoint label roles and
-no test-label access during development; (2) finite, reproducible predictions
-with GCN improving selection macro-F1 over MLP on identical nodes; (3) inference
-below 3 GiB allocated CUDA memory and 100 ms median per full graph on the
-available GPU; (4) at least 100 automated policy cases at observed error <=5%,
-with coverage and external development checks reported; (5) five genuine
-failures showing where referral succeeds or fails. Observed error is not a
-future safety guarantee.
+**User need, scope and acceptance criteria.** A social-network analyst needs
+four-class page labels with manageable review effort. This transductive prototype
+compares a feature-only MLP with a Normal-difficulty two-layer GCN on a fixed
+public graph. The completed prototype is assessed against five feasibility criteria:
 
-**Model and course foundations.** The specification-linked artifact contains
-22,470 nodes and 128 precomputed SVD features. MLP and GCN use 128 -> 64 -> 4,
-ReLU, dropout and cross-entropy. GCN adds symmetric degree-normalized aggregation,
-linking graph/spectral filtering with representation learning [1]. Temperature
-scaling [2] and a separately selected threshold address confidence reliability.
+1. Deterministic, disjoint training, selection, calibration, policy and test roles,
+   with test labels excluded from development.
+2. Finite, reproducible predictions, with GCN improving selection macro-F1 over
+   MLP on identical nodes.
+3. Inference below 3 GiB allocated CUDA memory and 100 ms median per full graph
+   on the available GPU.
+4. At least 100 accepted policy nodes at observed error <=5%, with coverage and
+   separate development-set checks reported. This is not a future-error guarantee.
+5. Five genuine failure cases showing when confidence-based referral catches or
+   misses errors.
 
-**Preliminary evidence.** Checksum, class and edge audits passed; three-epoch
-real-data smoke runs succeeded. The genuine baseline reached selection macro-F1
-0.774272; GCN reached 0.910558. GCN median full-graph inference was 52.835 ms,
-with 1,860.69 MiB peak allocated CUDA memory. Both fit on the local RTX 2060
-SUPER 8 GB; Rangpur is unnecessary for this prototype.
+**Model choice and course concepts.** Specification v2.5 prescribes the modified
+Gayanku Facebook Page-Page dataset: 22,470 nodes and 128 precomputed SVD features.
+The pinned source is `gayanku/facebook_page-page_dataset`; no features are fitted
+locally. MLP and GCN use 128 -> 64 -> 4, ReLU, dropout and cross-entropy.
+GCN adds symmetric degree-normalized aggregation, connecting graph/spectral
+filtering to representation learning (Kipf & Welling, 2017). Temperature scaling
+(Guo et al., 2017) uses calibration nodes; separate policy nodes select referral
+thresholds. The findings apply to this fixed graph, not unseen graphs.
 
-**Risks, budget and fallback.** Broken original hosting was resolved with the
-file actually linked by the specification, with explicit provenance. Remaining
-risks are single-split uncertainty, imperfect calibration and confident errors.
-Keep two small frozen models and one training seed; next apply the approved
-policy unchanged to held-out nodes. MLP is the low-cost fallback if graph/GPU
-resources are unavailable. Report any failure of the operating target instead
-of tuning on test labels.
+**Preliminary feasibility evidence.** Checksum, class and edge audits passed;
+three-epoch real-data smoke runs succeeded. Selection macro-F1 was 0.774272 for
+MLP and 0.910558 for GCN. GCN median full-graph inference was 52.835 ms, with
+1,860.69 MiB peak allocated CUDA memory. Both models fit on the local RTX 2060
+SUPER 8 GB. This prototype was successfully evaluated using local GPU resources
+without requiring Rangpur.
 
-**Consultation status:** pending. The student reports the updated course-profile
-check-off period as **19–30 October 2026** and plans an upcoming practical.
-This review does not complete the tutor-recorded hurdle. The review is isolated to one page in the PDF export; completion of this written
-review does not replace the pending consultation.
+**Risks, computational budget and fallback.** Evidence remains limited to one
+seed and split; imperfect calibration and highly confident errors persist.
+The frozen thresholds have been evaluated on held-out test nodes without
+retuning. Further validation across additional seeds and splits would be useful
+before operational use; those experiments have not been performed. Retain the
+two small models within the local GPU budget, with MLP as the low-cost fallback
+when graph/GPU resources are unavailable. Human review remains necessary;
+observed accepted-case error is not a deployment safety guarantee.
+
+**References.** Kipf & Welling (2017), *Semi-Supervised Classification with Graph
+Convolutional Networks*; Guo et al. (2017), *On Calibration of Modern Neural Networks*.
 
 ## Dataset provenance and label separation
 
 The [UCI Facebook Large Page-Page Network][uci] contains official pages linked
 by mutual likes, with page-description features [4]. Its raw release has 4,714
-word features. The original PyG download host failed DNS resolution. Appendix A
-item 6 of the supplied PDF instead links to the [gayanku repository][artifact];
-the student explicitly approved its existing 128-feature file on 17 October.
-It supplies **precomputed TruncatedSVD features**, not a verified copy of the
-original GraphMining/PyG feature matrix. No replacement representation was fitted
-locally. The source's SVD used all descriptions without class labels, consistent
-with this transductive setting. Staff approval of equivalence is not claimed.
+word features. Specification v2.5, Section 2.1 and Appendix A item 6, explicitly
+prescribes the **modified Gayanku PyG FacebookPagePage dataset**, available from
+the [Gayanku repository][artifact]. We use its pinned 128-feature `facebook.npz`.
+It supplies **precomputed TruncatedSVD features**; these are not claimed to be
+identical to the original GraphMining feature matrix. No replacement features
+were fitted locally. The source's SVD used all descriptions without class labels,
+consistent with this transductive setting. The dated source investigation remains
+in `DATA_PROVENANCE.md`; no dataset or experimental changes were needed for v2.5.
 
 - Source revision: `ec01d02c39da4385052023ed28e36f0794f61dc8`.
 - NPZ SHA-256: `7a1b8a0687515e9859d1ca649dc276825f5db44568894dfbb6b55ebc1cf6a9c1`.
@@ -469,7 +476,7 @@ evaluate selection, fit the development policy, then infer:
 Use `--device cpu` for the tested CPU path. Nonempty output directories are
 protected from overwrite. Repeats need fresh `--output-dir` and corresponding
 explicit `--mlp-checkpoint`/`--gcn-checkpoint`, or predictor `--checkpoint` and
-`--policy`. Preserve the approved local artifacts before Stage 8; do not refit
+`--policy`. Preserve the frozen local artifacts; do not refit
 them. A fresh reproduction generates its own matching checkpoint/policy pair;
 metadata/file hashes can differ even when weights/results reproduce.
 
@@ -540,11 +547,10 @@ passed here; on a fresh checkout without that archive, that one test is skipped.
 Section 4.1 restricts Git to code/scripts, documentation and README visuals.
 Data, checkpoints, caches and generated CSV/JSON stay ignored. Aggregate
 tables/policies remain reproducible under local `outputs/` (and `reports/`
-copies), with findings documented above. Previously tracked Stage 5 reports
-were untracked in Stage 6 without rewriting history. Never force-add artifacts.
-Progressive milestones are recorded in Git; no push or PR has been authorized.
+copies), with findings documented above. Eight completed progressive technical
+milestones are recorded in Git, before these documentation updates.
 
-## Final verification and submission status
+## Final verification and report export
 
 The assessment audit is in [SUBMISSION_CHECKLIST.md](SUBMISSION_CHECKLIST.md).
 The frozen protocol and exact checkpoint identities are in
@@ -577,35 +583,19 @@ and inspection files are excluded from Git. The feasibility section has forced
 page boundaries. The inspected export has 21 pages and all 15 embedded figures;
 the feasibility review occupies page 2 alone. Rendered-page review and automated
 checks found no blank pages, missing required content or out-of-bounds text.
-`inspect_report.py` reproduces the inspection and extracts the one-page review.
+The exporter also renders the standalone review without report page counters.
+`inspect_report.py` verifies that it is exactly one page and matches the review
+in the full report.
 Final inspection details are recorded in the checklist.
-
-**Pending external requirements:** tutor feasibility check-off (reported window
-19–30 October), student review of the code/report/disclosure, authorization to
-push, PR to upstream `topic-recognition`, and README PDF
-submission to Turnitin. Stage 8 commit approval was received on 28 October.
-The original internal target was 20 October; confirm the official course deadline. Later teaching-team review responses remain a separate phase.
-No push, PR or Turnitin submission has been performed.
-
-**History audit:** seven progressive commits exist through Stage 7. No dataset
-or model weights were found in those commits. Three small generated aggregate
-CSV/JSON files occur in historical commit `514067a`, removed from the current
-tree by `ecfce37`. They conflict with a literal code/scripts-plus-visuals reading
-of Section 4.1. This remains an explicit user/staff decision; no history was
-rewritten. `.vscode/settings.json` is interpreter configuration, not experiment data.
 
 ## Artificial Intelligence Usage Disclosure
 
-OpenAI Codex assisted with planning, substantial code generation/refinement,
-debugging, report drafting and execution of data checks, tests, training,
-evaluation and plots. Verification included source/checksum audits, label-role
-isolation tests, independent metric fixtures, checkpoint reloads, frozen-artifact
-checks, repeat experiments, final held-out evaluation and fresh-process inference. Reported automated
-checks were executed through Codex. The student reviewed and approved milestones
-and remains responsible for personally understanding, independently verifying
-and defending the code, decisions and claims; independent student execution is
-not claimed here. No experimental results were invented. Source methods and
-supplied artifacts are cited.
+I used OpenAI Codex for project planning, substantial code generation and
+refinement, debugging, report drafting and editing, and running data audits,
+training, evaluation, tests and visualisations. Codex also assisted with
+source/checksum verification, label-separation and metric checks, checkpoint
+reloads, reproducibility runs, frozen held-out evaluation, independent-process
+inference and PDF generation and inspection.
 
 ## References
 
@@ -615,7 +605,7 @@ supplied artifacts are cited.
 4. [UCI Facebook Large Page-Page Network, DOI 10.24432/C50900][uci] (2020; CC BY 4.0), and [specification-linked 128-feature reconstruction][artifact]. [Original PyG loader](https://pytorch-geometric.readthedocs.io/en/2.6.1/generated/torch_geometric.datasets.FacebookPagePage.html). Provenance differs as documented above.
 5. Geifman & El-Yaniv (2017), [Selective Classification for Deep Neural Networks](https://proceedings.neurips.cc/paper/2017/hash/4a8423d5e91fda00bb7e46540e2b0cf1-Abstract.html). The empirical policy here does not claim that paper's formal guarantees.
 6. [sklearn OvR AUROC](https://scikit-learn.org/1.7/modules/generated/sklearn.metrics.roc_auc_score.html) and [PyTorch CUDA timing](https://docs.pytorch.org/docs/stable/notes/cuda.html).
-7. Supplied `COMP3710_Report_2026_draft_v2.3.pdf`, Sections 2.1, 3–6 and Appendix A item 6. Its cover says Version 2.2/DRAFT; verify the operative course version. Check-off dates above are student-reported from the updated profile, not inferred from this draft.
+7. Supplied `COMP3710_Report_2026_v2.5.pdf`, Section 2.1 (page 4), Sections 3–6 and Appendix A item 6 (page 18). Version 2.5 explicitly prescribes the modified Gayanku PyG FacebookPagePage dataset; its cover still includes DRAFT. Administrative check-off dates are student-reported from the course profile.
 
 [uci]: https://archive.ics.uci.edu/dataset/527/facebook+large+page+page+network
 [artifact]: https://github.com/gayanku/facebook_page-page_dataset/tree/ec01d02c39da4385052023ed28e36f0794f61dc8

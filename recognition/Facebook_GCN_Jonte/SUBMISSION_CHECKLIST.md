@@ -1,7 +1,8 @@
 # Assessment compliance and submission checklist
 
-Initial audit: 18 October 2026; verification repeated 28 October 2026. Source: supplied 21-page assessment PDF, especially
-Sections 2.1, 3, 4.1, 5 and 6. Its cover is still marked Version 2.2/DRAFT;
+Initial audit: 18 October 2026; verification repeated 28 October 2026; feasibility
+review wording refreshed 29 October 2026. Source: supplied 21-page Version 2.5
+assessment PDF, especially Sections 2.1, 3, 4.1, 5 and 6. Its cover includes DRAFT;
 administrative dates must follow the operative course profile. These are evidence
 checks, not predicted marks or a claim that external hurdles are complete.
 
@@ -28,8 +29,8 @@ checks, not predicted marks or a claim that external hurdles are complete.
 | Confidence reliability and empirical referral | ECE/NLL/Brier, diagrams, frozen temperatures/thresholds, actual coverage/error | Complete; no future-risk guarantee claimed |
 | 3–5 genuine failure autopsies | Five held-out IDs, predictions/confidences, degrees and training-only neighbors | Complete; hypotheses separated from observations |
 | Engineering recommendation | README recommendation: supervised analyst assistance, fallback and limitations | Complete |
-| One-page written feasibility review | README dedicated section; PDF isolated page 2 | Verified; one-page extract also generated locally |
-| Compulsory tutor-recorded feasibility consultation (pass hurdle) | Student reports practical window 19–30 October | **Pending**; no completion claimed |
+| One-page written feasibility review | README dedicated section; PDF isolated page 2 | Verified; footer-free one-page standalone copy generated from the same source |
+| Compulsory tutor-recorded feasibility consultation (pass hurdle) | Student confirmed completion on 30 October 2026; consultation date not supplied | **Completed (student-reported)** |
 | Exact dependencies/reproducibility | Requirements/lock files; README; frozen protocol; clean source snapshot | Verified as far as practical; existing pinned environment reused, no clean-environment retraining |
 | Mandatory AI usage disclosure | README exact named subsection; tools/tasks/verification | Present and accurate; student final review pending |
 | Attribution in README/source/PR | References, source docstrings and local `PR_DRAFT.md` | Prepared; actual PR not opened |
@@ -66,8 +67,8 @@ checks, not predicted marks or a claim that external hurdles are complete.
 1. Student reviews final code, report, disclosure and historical-report issue.
    Do not rewrite history without explicit authorization; clarify acceptance
    with teaching staff if keeping those historical aggregate outputs.
-2. Complete the pending tutor consultation during the reported 19–30 October
-   period. Internal completion target is 20 October; verify the official deadline.
+2. Tutor consultation is completed, as confirmed by the student on 30 October
+   2026; retain the course check-off record for submission verification.
 3. Stage 8 commit approval was received on 28 October. After commit verification,
    separately authorize push and the PR to upstream `topic-recognition`.
    Nothing has been pushed.

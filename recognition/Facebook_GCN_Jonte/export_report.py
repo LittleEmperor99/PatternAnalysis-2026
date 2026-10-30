@@ -1,7 +1,8 @@
 """Render the README to A4 PDF with a headless local Chrome/Edge browser.
 
 Run with the optional report environment (requirements-report.txt). No network
-upload occurs. The feasibility review occupies its own page; output stays local.
+upload occurs. The default CLI exports both the full report and a separate,
+footer-free one-page feasibility review from the same README source.
 """
 
 import argparse
@@ -14,6 +15,7 @@ import tempfile
 from markdown_it import MarkdownIt
 
 PROJECT = Path(__file__).resolve().parent
+FEASIBILITY_HEADING = "COMP3710 — Feasibility Review"
 GITHUB_FILES = "https://github.com/LittleEmperor99/PatternAnalysis-2026/blob/topic-recognition/recognition/Facebook_GCN_Jonte/"
 
 CSS = """
@@ -42,11 +44,17 @@ img { max-width: 100%; max-height: 205mm; width: auto; height: auto;
       display: block; margin: 10pt auto; break-inside: avoid; }
 p:has(>img) { break-inside: avoid; }
 .feasibility { break-before: page; break-after: page; font-size: 10.5pt; line-height: 1.3; }
-.feasibility h2 { margin-top: 0; }
+.feasibility h2 { margin-top: 0; margin-bottom: 8pt; font-size: 18pt; }
+.feasibility > p:first-of-type { font-size: 12pt; margin: 0 0 8pt; }
+"""
+
+STANDALONE_CSS = """
+@page { @bottom-right { content: none; } }
+.feasibility { break-before: auto; break-after: auto; }
 """
 
 
-def render_html(readme):
+def render_html(readme, feasibility_only=False):
     md = MarkdownIt("commonmark", {"html": False}).enable("table")
 
     def heading_open(tokens, index, options, env):
@@ -57,22 +65,24 @@ def render_html(readme):
 
     md.renderer.rules["heading_open"] = heading_open
     body = md.render(readme.read_text(encoding="utf-8"))
-    body, count = re.subn(
-        r'(<h2[^>]*>One-page feasibility review</h2>.*?)(?=<h2\b)',
-        r'<section class="feasibility">\1</section>', body, flags=re.S,
-    )
-    if count != 1:
+    pattern = r'(<h2[^>]*>' + re.escape(FEASIBILITY_HEADING) + r'</h2>.*?)(?=<h2\b|$)'
+    reviews = list(re.finditer(pattern, body, flags=re.S))
+    if len(reviews) != 1:
         raise ValueError("Expected exactly one feasibility review section")
+    review = reviews[0]
+    section = '<section class="feasibility">' + review.group(1) + '</section>'
+    body = section if feasibility_only else body[:review.start()] + section + body[review.end():]
     # Preserve local image loading, but make code/document links portable in PDF.
     body = re.sub(r'href="(?!https?://|#)([^\"]+)"',
                   lambda m: 'href="' + GITHUB_FILES + m.group(1) + '"', body)
     return ("<!doctype html><html><head><meta charset='utf-8'>"
             f"<base href='{html.escape(readme.parent.as_uri())}/'>"
-            f"<title>COMP3710 Facebook GCN Technical Report</title><style>{CSS}</style>"
+            f"<title>{'COMP3710 Feasibility Review' if feasibility_only else 'COMP3710 Facebook GCN Technical Report'}</title>"
+            f"<style>{CSS}{STANDALONE_CSS if feasibility_only else ''}</style>"
             f"</head><body>{body}</body></html>")
 
 
-def export_pdf(readme, output, browser=None):
+def export_pdf(readme, output, browser=None, *, feasibility_only=False):
     readme, output = Path(readme).resolve(), Path(output).resolve()
     candidates = [Path(browser)] if browser else [
         Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
@@ -83,7 +93,7 @@ def export_pdf(readme, output, browser=None):
         raise FileNotFoundError("Install Chrome/Edge or pass --browser to its executable")
     output.parent.mkdir(parents=True, exist_ok=True)
     html_file = output.with_suffix(".html")
-    html_file.write_text(render_html(readme), encoding="utf-8")
+    html_file.write_text(render_html(readme, feasibility_only), encoding="utf-8")
     with tempfile.TemporaryDirectory(dir=output.parent, prefix="browser_") as profile:
         result = subprocess.run(
             [str(executable), "--headless=new", "--disable-gpu", "--no-first-run",
@@ -105,6 +115,8 @@ def main():
     parser.add_argument("--browser", type=Path)
     args = parser.parse_args()
     export_pdf(args.readme, args.output, args.browser)
+    export_pdf(args.readme, args.output.parent / "COMP3710_Feasibility_Review.pdf",
+               args.browser, feasibility_only=True)
 
 
 if __name__ == "__main__":
