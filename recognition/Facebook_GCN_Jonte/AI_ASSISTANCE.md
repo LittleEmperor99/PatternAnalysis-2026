@@ -1,12 +1,11 @@
 # AI assistance disclosure
 
-I used OpenAI Codex throughout this project for substantial code generation,
+I used OpenAI Codex throughout this project for code generation,
 refinement, debugging, experiment execution, analysis and documentation. I
 reviewed and approved the project milestones, selected the project scope and
 approved the dataset source and final reports. The automated checks described
 below were executed through Codex; my review is distinct from independently
-writing, running or testing the implementation. I am responsible for
-understanding and defending the final submission.
+writing, running or testing the implementation.
 
 ## Repository and environment
 
@@ -84,5 +83,4 @@ results during wording revisions. Codex also implemented the local PDF export
 and inspection helpers. Checks confirmed a 21-page report with 15 embedded
 figures and a matching one-page, footer-free feasibility review, with no blank
 pages or out-of-bounds text; rendered pages were visually inspected through
-Codex. This record supplements the mandatory first-person disclosure in
-README.md.
+Codex. This record supplements the mandatory disclosure in README.md.
